@@ -35,6 +35,7 @@ import {
   sortAgents,
 } from "@/lib/agents";
 import type { Agent } from "@/lib/hive";
+import { quietLabel, useSettings } from "@/lib/settings";
 import type { Runtime } from "@/lib/status-feed";
 
 const STATUS: Record<
@@ -85,11 +86,26 @@ export function AgentsView({
   runtimes: Runtimes;
   feed: FeedInfo;
 }) {
-  const [filter, setFilter] = useState<Filter>("all");
-  const [sort, setSort] = useState<Sort>("attention");
-  const stats = agentStats(agents, now, runtimes);
-  const shown = sortAgents(agents, sort, now, runtimes).filter(
-    (a) => filter === "all" || agentStatus(a, now, runtimes[a.name]) === filter,
+  const settings = useSettings();
+  // A pick on this page wins over the saved default until the page reloads.
+  const [filterPick, setFilter] = useState<Filter | null>(null);
+  const [sortPick, setSort] = useState<Sort | null>(null);
+  const filter = filterPick ?? settings.agentFilter;
+  const sort = sortPick ?? settings.agentSort;
+  const quietAfterS = settings.quietAfterMinutes * 60;
+  const stats = agentStats(agents, now, runtimes, quietAfterS);
+  // Hidden agents leave this view but still count in the stats and Needs you.
+  // Pinned ones go first, keeping the sort order within each group.
+  const sorted = sortAgents(agents, sort, now, runtimes, quietAfterS).filter(
+    (a) => !settings.hidden.includes(a.name),
+  );
+  const shown = [
+    ...sorted.filter((a) => settings.pinned.includes(a.name)),
+    ...sorted.filter((a) => !settings.pinned.includes(a.name)),
+  ].filter(
+    (a) =>
+      filter === "all" ||
+      agentStatus(a, now, runtimes[a.name], quietAfterS) === filter,
   );
   const sortItems = Object.entries(SORTS).map(([value, label]) => ({
     value,
@@ -138,7 +154,7 @@ export function AgentsView({
           sub="Posted in the last 15 min"
         />
         <Stat
-          label="Quiet > 2h"
+          label={`Quiet > ${quietLabel(settings.quietAfterMinutes)}`}
           icon={ClockAlert}
           warn={stats.quiet.length > 0}
           value={stats.quiet.length}
@@ -212,6 +228,7 @@ export function AgentsView({
               now={now}
               runtime={runtimes[a.name]}
               feed={feed}
+              quietAfterS={quietAfterS}
             />
           ))}
         </div>
@@ -254,13 +271,15 @@ function AgentCard({
   now,
   runtime,
   feed,
+  quietAfterS,
 }: {
   agent: Agent;
   now: number;
   runtime?: Runtime;
   feed: FeedInfo;
+  quietAfterS: number;
 }) {
-  const status = agentStatus(a, now, runtime);
+  const status = agentStatus(a, now, runtime, quietAfterS);
   const ago = a.lastSeenAt ? formatAge((now - a.lastSeenAt) * 1000) : null;
   const quiet = status === "quiet";
 

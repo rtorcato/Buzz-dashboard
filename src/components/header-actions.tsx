@@ -1,15 +1,14 @@
 "use client";
 
-import { ClockAlert, Moon, RefreshCw, Sun } from "lucide-react";
+import { ClockAlert, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
 import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { UsageChip } from "@/components/usage-chip";
-import { formatAge, STALE_AFTER_MS } from "@/lib/age";
+import { STALE_AFTER_MS } from "@/lib/age";
+import { formatWhen } from "@/lib/format-time";
+import { REFRESH_MS, useSettings } from "@/lib/settings";
 import type { Usage } from "@/lib/status-feed";
-
-const REFRESH_EVERY_MS = 60_000;
 
 export function HeaderActions({
   updatedAt,
@@ -19,7 +18,8 @@ export function HeaderActions({
   feed: { usage: Usage | null; publishedAt: number | null; stale: boolean };
 }) {
   const router = useRouter();
-  const { resolvedTheme, setTheme } = useTheme();
+  const settings = useSettings();
+  const refreshEvery = REFRESH_MS[settings.refresh];
   const [refreshing, startRefresh] = useTransition();
   const [now, setNow] = useState(() => Date.now());
 
@@ -27,12 +27,15 @@ export function HeaderActions({
 
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
-    const poll = setInterval(() => router.refresh(), REFRESH_EVERY_MS);
+    // Off still lets you refresh by hand.
+    const poll = refreshEvery
+      ? setInterval(() => router.refresh(), refreshEvery)
+      : undefined;
     return () => {
       clearInterval(tick);
       clearInterval(poll);
     };
-  }, [router]);
+  }, [router, refreshEvery]);
 
   const age = updatedAt ? now - Date.parse(updatedAt) : 0;
   const stale = age > STALE_AFTER_MS;
@@ -64,7 +67,7 @@ export function HeaderActions({
         >
           {/* Phones drop "Updated" to make room for the usage chip. */}
           <span className="hidden sm:inline">Updated </span>
-          {formatAge(age)} ago
+          {formatWhen(now - age, now, settings)}
         </span>
       )}
       <Button
@@ -79,17 +82,6 @@ export function HeaderActions({
           className={refreshing ? "animate-spin" : undefined}
           aria-hidden
         />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-9"
-        aria-label="Toggle theme"
-        onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-      >
-        {/* CSS picks the icon so server and client render the same markup. */}
-        <Moon className="dark:hidden" aria-hidden />
-        <Sun className="hidden dark:block" aria-hidden />
       </Button>
     </div>
   );
