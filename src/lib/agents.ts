@@ -33,11 +33,12 @@ export function agentStatus(
   agent: Agent,
   now: number,
   runtime?: Runtime,
+  quietAfterS = QUIET_AFTER_S,
 ): AgentStatus {
   if (runtime?.state === "stopped") return "stopped";
   const since = now - (agent.lastSeenAt ?? 0);
   if (since <= ACTIVE_WITHIN_S) return "active";
-  return since > QUIET_AFTER_S ? "quiet" : "idle";
+  return since > quietAfterS ? "quiet" : "idle";
 }
 
 /** URL segment for an agent: "Optimus Prime" → "optimus-prime". */
@@ -79,6 +80,7 @@ export function sortAgents(
   sort: Sort,
   now: number,
   runtimes: Runtimes = {},
+  quietAfterS = QUIET_AFTER_S,
 ): Agent[] {
   if (sort === "name") {
     return agents.toSorted((a, b) => a.name.localeCompare(b.name));
@@ -88,7 +90,7 @@ export function sortAgents(
   // most recent first, and parked (stopped) agents last.
   const rank = (a: Agent) =>
     ({ quiet: 0, active: 1, idle: 1, stopped: 2 })[
-      agentStatus(a, now, runtimes[a.name])
+      agentStatus(a, now, runtimes[a.name], quietAfterS)
     ];
   return agents.toSorted((a, b) => {
     const ra = rank(a);
@@ -102,9 +104,16 @@ export function agentStats(
   agents: Agent[],
   now: number,
   runtimes: Runtimes = {},
+  quietAfterS = QUIET_AFTER_S,
 ) {
-  const quiet = sortAgents(agents, "attention", now, runtimes).filter(
-    (a) => agentStatus(a, now, runtimes[a.name]) === "quiet",
+  const quiet = sortAgents(
+    agents,
+    "attention",
+    now,
+    runtimes,
+    quietAfterS,
+  ).filter(
+    (a) => agentStatus(a, now, runtimes[a.name], quietAfterS) === "quiet",
   );
   const today = agents.reduce((n, a) => n + a.messagesToday, 0);
   // The six full days before today.
@@ -119,7 +128,7 @@ export function agentStats(
       .filter((a) => runtimes[a.name]?.state === "stopped")
       .map((a) => a.name),
     active: agents.filter(
-      (a) => agentStatus(a, now, runtimes[a.name]) === "active",
+      (a) => agentStatus(a, now, runtimes[a.name], quietAfterS) === "active",
     ).length,
     quiet: quiet.map((a) => a.name),
     today,

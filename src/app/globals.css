@@ -154,3 +154,27 @@
     animation: none;
   }
 }
+
+/* Settings → Density: compact tightens cards. */
+html[data-density="compact"] [data-slot="card"] {
+  --card-spacing: --spacing(3);
+}
+html[data-density="compact"] main [data-slot="card"].p-5 {
+  padding: --spacing(3.5);
+}
+
+/* Settings → Motion: "reduced" is prefers-reduced-motion by choice. */
+/* biome-ignore-start lint/complexity/noImportantStyles: must beat component animation utilities */
+html[data-motion="reduced"] *,
+html[data-motion="reduced"] *::before,
+html[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+/* biome-ignore-end lint/complexity/noImportantStyles: end */
+html[data-motion="reduced"]::view-transition-group(*),
+html[data-motion="reduced"]::view-transition-old(*),
+html[data-motion="reduced"]::view-transition-new(*) {
+  animation: none;
+}
