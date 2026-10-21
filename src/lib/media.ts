@@ -1,6 +1,7 @@
 import "server-only";
 
 import { checkEnv } from "@rtorcato/js-common/env";
+import { fetchText } from "@rtorcato/js-common/fetch";
 import { AwsClient } from "aws4fetch";
 import { z } from "zod";
 
@@ -159,12 +160,14 @@ export async function listMedia(env: MediaEnv): Promise<MediaFile[]> {
     const url = r2Url(env);
     url.searchParams.set("list-type", "2");
     if (token) url.searchParams.set("continuation-token", token);
-    const res = await client.fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) throw new Error(`R2 list failed: HTTP ${res.status}`);
-    const listing = parseListing(await res.text());
+    const signed = await client.sign(url);
+    const listing = parseListing(
+      await fetchText(signed.url, {
+        headers: signed.headers,
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      }),
+    );
     objects.push(...listing.objects);
     token = listing.next;
     if (!token) break;

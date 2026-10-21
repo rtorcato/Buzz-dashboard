@@ -1,5 +1,6 @@
 import "server-only";
 
+import { fetchWithTimeout, HttpError } from "@rtorcato/js-common/fetch";
 import { connection } from "next/server";
 import { cache } from "react";
 
@@ -117,19 +118,17 @@ export const loadStatusFeed = cache(async (): Promise<FeedResult> => {
   }
   try {
     // S3 API, not the public URL, so an edge-cached copy can't be served.
-    const res = await r2Client(env).fetch(r2Url(env, FEED_KEY), {
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (res.status === 404) {
+    const { url, headers } = await r2Client(env).sign(r2Url(env, FEED_KEY));
+    last = parseStatusFeed(
+      await fetchWithTimeout(url, { headers, cache: "no-store" }, 5_000),
+    );
+    const now = Date.now() / 1000;
+    return { feed: last, stale: last ? isStale(last, now) : false };
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 404) {
       last = null;
       return { feed: null, stale: false };
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    last = parseStatusFeed(await res.json());
-    const now = Date.now() / 1000;
-    return { feed: last, stale: last ? isStale(last, now) : false };
-  } catch {
     return { feed: last, stale: last !== null };
   }
 });
