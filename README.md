@@ -40,7 +40,9 @@ reach the browser. See [`.env.example`](.env.example).
 
 | Variable | Purpose |
 |---|---|
-| `GITHUB_TOKEN` | Optional fine-grained, read-only GitHub token for `rtorcato/*` and `infra-zero/*`. Without it the GitHub-backed views show "source down" |
+| `GITHUB_TOKEN` | Optional fine-grained, read-only GitHub token for the `GITHUB_OWNERS` repos. Without it the GitHub-backed views show "source down" |
+| `GITHUB_OWNERS` | Comma list of GitHub users or orgs to read, e.g. `octo-org,octo-labs`. No default: without it the GitHub-backed views show "source down" |
+| `GITHUB_TRUSTED_AUTHORS` | Comma list of logins whose 🤖 header names an agent, e.g. `octo-bot,octocat`. Unset trusts nobody, so everything shows as unattributed |
 | `BUZZ_RELAY_URL` | Buzz relay URL |
 | `BUZZ_PRIVATE_KEY` | Hex key of a dedicated read-only Buzz identity |
 | `BUZZ_AUTH_TAG` | Optional NIP-OA owner attestation JSON, needed if that identity is not a relay member |

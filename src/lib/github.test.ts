@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.stubEnv("GITHUB_OWNERS", "acme, acme-labs");
+vi.stubEnv("GITHUB_TRUSTED_AUTHORS", "acme-bot,acme");
 vi.stubEnv(
   "AGENT_ALIASES",
   JSON.stringify({
@@ -28,7 +30,7 @@ const header = (name: string) =>
 const comment = (
   body: string | null,
   createdAt: string,
-  login = "rtorcato-bot",
+  login = "acme-bot",
 ) => ({
   body,
   createdAt,
@@ -39,13 +41,13 @@ const raw = (over: Record<string, unknown> = {}) => ({
   __typename: "PullRequest" as "Issue" | "PullRequest",
   number: 7,
   title: "feat: thing",
-  url: "https://github.com/rtorcato/js-common/pull/7",
+  url: "https://github.com/acme/js-common/pull/7",
   body: `${header("Shockwave")}\n\nBody.`,
   createdAt: "2026-10-18T10:00:00Z",
   closedAt: null,
   mergedAt: null,
-  author: { login: "rtorcato-bot" },
-  repository: { nameWithOwner: "rtorcato/js-common" },
+  author: { login: "acme-bot" },
+  repository: { nameWithOwner: "acme/js-common" },
   labels: { nodes: [{ name: "ai-review" }] },
   ...over,
 });
@@ -73,12 +75,12 @@ describe("toItem", () => {
     expect(
       toItem(
         raw({
-          repository: { nameWithOwner: "rtorcato/Buzz-dashboard" },
+          repository: { nameWithOwner: "acme/Buzz-dashboard" },
           mergedAt: "2026-10-18T12:00:00Z",
         }),
       ),
     ).toMatchObject({
-      repo: "rtorcato/Buzz-dashboard",
+      repo: "acme/Buzz-dashboard",
       isPr: true,
       agent: "Shockwave",
       labels: ["ai-review"],
@@ -91,9 +93,16 @@ describe("toItem", () => {
   it("ignores a header in a PR from anyone but the bot or the owner (#37)", () => {
     expect(toItem(raw({ author: { login: "mallory" } })).agent).toBeNull();
     expect(toItem(raw({ author: null })).agent).toBeNull();
-    expect(toItem(raw({ author: { login: "rtorcato" } })).agent).toBe(
-      "Shockwave",
-    );
+    expect(toItem(raw({ author: { login: "acme" } })).agent).toBe("Shockwave");
+  });
+
+  it("trusts nobody when GITHUB_TRUSTED_AUTHORS is unset", () => {
+    vi.stubEnv("GITHUB_TRUSTED_AUTHORS", "");
+    try {
+      expect(toItem(raw()).agent).toBeNull();
+    } finally {
+      vi.stubEnv("GITHUB_TRUSTED_AUTHORS", "acme-bot,acme");
+    }
   });
 
   it("never attributes an issue to its filer", () => {
@@ -163,10 +172,13 @@ describe("claims", () => {
 
 describe("queries", () => {
   it("cover 30 days in contiguous 1-day slices up to today", () => {
-    const q = prQueries(new Date("2026-10-19T14:00:00Z"));
+    const q = prQueries(new Date("2026-10-19T14:00:00Z"), [
+      "acme",
+      "acme-labs",
+    ]);
     expect(q).toHaveLength(30);
     expect(q[0]).toBe(
-      "is:pr user:rtorcato user:infra-zero created:2026-09-19..2026-09-19",
+      "is:pr user:acme user:acme-labs created:2026-09-19..2026-09-19",
     );
     expect(q[1]).toContain("created:2026-09-20..2026-09-20");
     expect(q.at(-2)).toContain("created:2026-10-17..2026-10-17");
@@ -174,8 +186,8 @@ describe("queries", () => {
   });
 
   it("ask for every claim label on both owners", () => {
-    expect(claimQuery()).toBe(
-      "is:open label:ai-wip,ai-review,ai-changes,ai-blocked user:rtorcato user:infra-zero",
+    expect(claimQuery(["acme", "acme-labs"])).toBe(
+      "is:open label:ai-wip,ai-review,ai-changes,ai-blocked user:acme user:acme-labs",
     );
   });
 
@@ -242,7 +254,7 @@ describe("getGitHub", () => {
       expect(new Headers(init.headers).get("Authorization")).toBe("Bearer t0k");
       return JSON.parse(init.body as string).variables;
     });
-    expect(sent[0].claims).toBe(claimQuery());
+    expect(sent[0].claims).toBe(claimQuery(["acme", "acme-labs"]));
     expect(sent[7].s29).toContain("created:>=2026-10-18");
 
     expect(gh.claims.map((c) => [c.number, c.agent, c.claimedAt])).toEqual([
@@ -251,6 +263,20 @@ describe("getGitHub", () => {
     ]);
     expect(gh.prs.map((p) => p.number)).toEqual([8]);
     expect(gh.truncated).toBe(false);
+  });
+
+  it("refuses to search without GITHUB_OWNERS", async () => {
+    const fetch = serve({});
+    vi.stubGlobal("fetch", fetch);
+    vi.stubEnv("GITHUB_OWNERS", " , ");
+    try {
+      await expect(getGitHub("t0k")).rejects.toThrow(
+        "GITHUB_OWNERS is not set",
+      );
+    } finally {
+      vi.stubEnv("GITHUB_OWNERS", "acme, acme-labs");
+    }
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("flags a search that returned fewer nodes than it matched", async () => {

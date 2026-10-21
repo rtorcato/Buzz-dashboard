@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { AgentDetail } from "@/components/agent-detail";
 import { byDay, findAgent, runtimeFor } from "@/lib/agents";
+import { envList } from "@/lib/github";
 import { getActivity, loadHive } from "@/lib/hive";
 import { loadStatusFeed } from "@/lib/status-feed";
 
@@ -39,6 +40,7 @@ export default async function AgentPage({ params }: Props) {
       activity={activity}
       runtime={feed ? runtimeFor(found.agent, feed.runtime) : undefined}
       feed={feed && { publishedAt: feed.publishedAt, stale }}
+      owners={envList("GITHUB_OWNERS")}
     />
   );
 }
