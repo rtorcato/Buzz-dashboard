@@ -38,9 +38,7 @@ import { npubEncode } from "@/lib/npub";
 import type { Runtime } from "@/lib/status-feed";
 
 // DESIGN.md → "Agent page" (#27). Read-only: every action is an outbound link.
-// Claims and PRs need the GitHub reader (#30), so those sections say so.
-
-const GITHUB_READER = "https://github.com/rtorcato/Buzz-dashboard/issues/30";
+// Claims and PRs aren't read on this page yet, so those sections say so.
 
 const ago = (s: number) => (s < 60 ? "just now" : `${formatAge(s * 1000)} ago`);
 
@@ -51,6 +49,7 @@ export function AgentDetail({
   feed,
   groups,
   activity,
+  owners,
 }: {
   agent: Agent;
   now: number;
@@ -60,10 +59,16 @@ export function AgentDetail({
   groups: DayGroup[];
   /** Messages per day for 30 days, oldest first, or null if the query failed. */
   activity: number[] | null;
+  /** GITHUB_OWNERS; the PR links hide without it. */
+  owners: string[];
 }) {
   const status = agentStatus(a, now, runtime);
   const week = a.daily.reduce((n, d) => n + d, 0);
-  const prs = `https://github.com/search?type=pullrequests&q=${encodeURIComponent(`user:rtorcato is:pr "@${a.name}"`)}`;
+  const users = owners.map((o) => `user:${o}`).join(" ");
+  const prs =
+    owners.length > 0
+      ? `https://github.com/search?type=pullrequests&q=${encodeURIComponent(`${users} is:pr "@${a.name}"`)}`
+      : null;
 
   return (
     <div className="space-y-4">
@@ -108,9 +113,11 @@ export function AgentDetail({
             {a.role && `${a.role} · `}
             <span className="font-mono text-sm">@{a.name}</span> in PR headers
           </p>
-          <div className="grid grid-cols-1 gap-2 sm:flex">
-            <OutLink href={prs}>PRs</OutLink>
-          </div>
+          {prs && (
+            <div className="grid grid-cols-1 gap-2 sm:flex">
+              <OutLink href={prs}>PRs</OutLink>
+            </div>
+          )}
           <RuntimeRow
             runtime={runtime}
             now={now}
@@ -166,7 +173,7 @@ export function AgentDetail({
           <Section
             title="Recent PRs"
             className="order-3 xl:order-none"
-            action={<OutLink href={prs}>All on GitHub</OutLink>}
+            action={prs && <OutLink href={prs}>All on GitHub</OutLink>}
           >
             <NotRead what="PRs" />
           </Section>
@@ -227,22 +234,11 @@ function OutLink({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
-// Claims and PRs come from GitHub, which `dev` doesn't read yet (#30).
 function NotRead({ what }: { what: string }) {
   return (
     <div className="flex items-center gap-3 rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground">
       <PlugZap className="size-4 shrink-0" aria-hidden />
-      <p>
-        {what} aren&apos;t read yet: the dashboard has no GitHub reader.{" "}
-        <a
-          href={GITHUB_READER}
-          target="_blank"
-          rel="noreferrer"
-          className="font-medium text-foreground underline-offset-4 hover:underline"
-        >
-          #30
-        </a>
-      </p>
+      <p>{what} aren&apos;t shown on this page yet.</p>
     </div>
   );
 }

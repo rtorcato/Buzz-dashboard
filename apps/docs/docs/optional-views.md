@@ -27,11 +27,9 @@ The dashboard reads the `ai-*` labels on issues and pull requests, so it expects
 | `ai-blocked` | issue | The agent gave up and needs a human. |
 | `merge-ready` | pull request | Reviewed and waiting for a merge. |
 
-An agent is named from the header its comments and pull request bodies open with: a robot emoji, then the agent's name in backticks, as in `🤖 *Automated — `@Name` 🐝 (Buzz agent)*`. Pull requests without that header are listed under "Unattributed". The header only counts when the shared bot account or the repository owner wrote it, because anyone can paste a header into a public repository.
+An agent is named from the header its comments and pull request bodies open with: a robot emoji, then the agent's name in backticks, as in `🤖 *Automated — `@Name` 🐝 (Buzz agent)*`. Pull requests without that header are listed under "Unattributed". The header only counts when a login in `GITHUB_TRUSTED_AUTHORS` wrote it, because anyone can paste a header into a public repository. Leave it unset and nothing is attributed.
 
-:::note
-Which GitHub owners the dashboard reads, and which authors it trusts for the header, are set in `src/lib/github.ts` today. Moving both to environment variables is tracked in [#53](https://github.com/rtorcato/buzz-dashboard/issues/53).
-:::
+`GITHUB_OWNERS` sets which users or orgs the dashboard reads. See [Configuration](./configuration.md#github-optional).
 
 ## Media and the status feed
 

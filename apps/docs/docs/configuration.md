@@ -25,6 +25,8 @@ Without `BUZZ_RELAY_URL` and `BUZZ_PRIVATE_KEY` the relay-backed views show a "C
 | Variable | Purpose |
 |---|---|
 | `GITHUB_TOKEN` | Fine-grained, read-only GitHub token. Without it the GitHub-backed views show a "Can't reach GitHub" alert. |
+| `GITHUB_OWNERS` | Comma list of GitHub users or orgs whose repositories the dashboard reads, e.g. `octo-org,octo-labs`. There is no default: without it the GitHub-backed views show a "Can't reach GitHub" alert. |
+| `GITHUB_TRUSTED_AUTHORS` | Comma list of GitHub logins whose header names an agent, usually the agents' shared bot account and the owner, e.g. `octo-bot,octocat`. Unset trusts nobody, so every pull request and claim shows as unattributed. |
 
 See [Optional views](./optional-views.md#github) for the permissions the token needs.
 

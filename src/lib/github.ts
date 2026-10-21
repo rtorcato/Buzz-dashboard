@@ -4,12 +4,15 @@ import { connection } from "next/server";
 import { cache } from "react";
 import { agentName } from "./hive";
 
-// The GitHub reader: open claims and recent PRs on the rtorcato/* and
-// infra-zero/* repos, read on the server with the optional read-only
-// GITHUB_TOKEN. Every agent opens its GitHub comments and PR bodies with a
-// "🤖 *Automated — `@Name` 🐝 …" header, and that names the agent.
+// The GitHub reader: open claims and recent PRs on the GITHUB_OWNERS repos,
+// read on the server with the optional read-only GITHUB_TOKEN. Every agent
+// opens its GitHub comments and PR bodies with a "🤖 *Automated — `@Name` 🐝 …"
+// header, and that names the agent.
 
-export const OWNERS = ["rtorcato", "infra-zero"] as const;
+/** A comma (or space) separated env var as a list; unset or empty is []. */
+export const envList = (name: string): string[] =>
+  (process.env[name] ?? "").split(/[\s,]+/).filter(Boolean);
+
 export const CLAIM_LABELS = [
   "ai-wip",
   "ai-review",
@@ -54,11 +57,10 @@ export type GitHub = {
 const HEADER_RE = /🤖[^\n]*?`@([^`\n\\]+)\\?`/;
 
 // Anyone can paste a header into a PR or comment on a public repo, so it only
-// names an agent when the shared bot account or the owner wrote it (#37).
-const TRUSTED_AUTHORS: readonly string[] = ["rtorcato-bot", "rtorcato"];
-
+// names an agent when a GITHUB_TRUSTED_AUTHORS login wrote it. Unset trusts
+// nobody: every item stays unattributed.
 const trusted = (author: { login: string } | null | undefined) =>
-  author != null && TRUSTED_AUTHORS.includes(author.login);
+  author != null && envList("GITHUB_TRUSTED_AUTHORS").includes(author.login);
 
 /** The agent named by the first bot header in `body`, or null. */
 export function headerAgent(body: string | null | undefined): string | null {
@@ -136,10 +138,10 @@ export function toClaim(raw: RawItem): Claim {
   };
 }
 
-const owners = OWNERS.map((o) => `user:${o}`).join(" ");
+const users = (owners: string[]) => owners.map((o) => `user:${o}`).join(" ");
 
-export const claimQuery = () =>
-  `is:open label:${CLAIM_LABELS.join(",")} ${owners}`;
+export const claimQuery = (owners: string[]) =>
+  `is:open label:${CLAIM_LABELS.join(",")} ${users(owners)}`;
 
 const day = (now: Date, daysAgo: number) =>
   new Date(now.getTime() - daysAgo * 86_400_000).toISOString().slice(0, 10);
@@ -150,14 +152,14 @@ const PAGE = 100;
 // ponytail: each search returns at most 100 nodes, so the window is cut into
 // 1-day `created:` slices (about 30 PRs a day today, 2-day slices already
 // overflowed). If `truncated` shows up, page the slices with `after` cursors.
-export function prQueries(now: Date): string[] {
+export function prQueries(now: Date, owners: string[]): string[] {
   const queries: string[] = [];
   for (let from = PR_WINDOW_DAYS; from > 0; from -= SLICE_DAYS) {
     const range =
       from <= SLICE_DAYS
         ? `>=${day(now, from)}`
         : `${day(now, from)}..${day(now, from - SLICE_DAYS + 1)}`;
-    queries.push(`is:pr ${owners} created:${range}`);
+    queries.push(`is:pr ${users(owners)} created:${range}`);
   }
   return queries;
 }
@@ -222,9 +224,12 @@ export async function getGitHub(
   token: string,
   now = new Date(),
 ): Promise<GitHub> {
-  const slices = prQueries(now);
+  const owners = envList("GITHUB_OWNERS");
+  // Without a user: qualifier the searches would span all of GitHub.
+  if (!owners.length) throw new Error("GITHUB_OWNERS is not set");
+  const slices = prQueries(now, owners);
   const searches: [string, string][] = [
-    ["claims", claimQuery()],
+    ["claims", claimQuery(owners)],
     ...slices.map((q, i): [string, string] => [`s${i}`, q]),
   ];
   const data: Record<string, RawSearch> = {};
