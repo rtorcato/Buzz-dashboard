@@ -1,0 +1,32 @@
+name: Deploy Docs
+
+# WHEN to deploy lives here; HOW (build + publish) is the shared reusable
+# workflow in rtorcato/repo-tooling, so every torcato.dev docs site stays in
+# lockstep.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/docs/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # https://docs.torcato.dev/buzz-dashboard/
+  # Pinned to a commit, never a branch: this job hands over the Cloudflare secrets.
+  cloudflare:
+    permissions:
+      contents: read
+    uses: rtorcato/repo-tooling/.github/workflows/docs-deploy-cloudflare.yml@863492b9f3b85c60085a8435b372990ffc755b68 # v6.1.1
+    with:
+      build-filter: 'buzz-dashboard-docs'
+      worker-name: 'buzz-dashboard-docs'
+      base-path: '/buzz-dashboard/'
+      route: 'docs.torcato.dev/buzz-dashboard/*'
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

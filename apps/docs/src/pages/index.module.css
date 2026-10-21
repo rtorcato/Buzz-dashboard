@@ -1,0 +1,45 @@
+.hero {
+	padding: 5rem 1rem 3rem;
+	text-align: center;
+}
+
+.title {
+	font-size: clamp(2.5rem, 6vw, 4rem);
+	margin-bottom: 0.5rem;
+}
+
+.tagline {
+	font-size: 1.25rem;
+	color: var(--jt-muted);
+	max-width: 40rem;
+	margin: 0 auto 1.5rem;
+}
+
+.install {
+	display: inline-block;
+	padding: 0.75rem 1.25rem;
+	margin-bottom: 1.5rem;
+	background: var(--jt-code-bg);
+	border: 1px solid var(--jt-border);
+	border-radius: 12px;
+}
+
+.pillars {
+	display: grid;
+	gap: 1rem;
+	grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+	max-width: 64rem;
+	margin: 0 auto;
+	padding: 1rem 1rem 4rem;
+}
+
+.pillar {
+	padding: 1.25rem;
+	background: var(--jt-surface);
+	border: 1px solid var(--jt-border);
+	border-radius: 14px;
+}
+
+.pillar:hover {
+	border-color: var(--jt-accent-border);
+}

@@ -1,0 +1,56 @@
+/* biome-ignore-all lint/complexity/noImportantStyles: the mobile drawer must beat Infima's transform */
+/* Site theme: the shared design tokens + this project's accent. */
+@import "./_jt-tokens.css";
+@import "./theme.css";
+
+:root {
+	--ifm-color-primary: #a35d00;
+	--jt-accent: #a35d00;
+}
+
+[data-theme="dark"] {
+	--ifm-color-primary: #e19b34;
+	--jt-accent: #e19b34;
+}
+
+/* Mobile drawer: one flat menu (see src/theme/Navbar/MobileSidebar). */
+.navbar-sidebar__items,
+.navbar-sidebar__items.navbar-sidebar__items--show-secondary {
+	transform: translate3d(0, 0, 0) !important;
+}
+.navbar-sidebar__items > .navbar-sidebar__item:nth-child(2),
+.navbar-sidebar__back {
+	display: none !important;
+}
+.jt-mobile-menu {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 4px 0;
+	margin: 0;
+	list-style: none;
+}
+.jt-mobile-menu__link {
+	display: block;
+	padding: 12px 14px;
+	border-radius: 8px;
+	color: var(--jt-heading);
+	font-weight: 600;
+	font-size: 15px;
+	text-decoration: none;
+}
+.jt-mobile-menu__link:hover,
+.jt-mobile-menu__link:focus-visible {
+	background: var(--jt-surface2);
+	color: var(--jt-heading);
+	text-decoration: none;
+}
+.jt-mobile-menu__link--active {
+	background: var(--jt-accent-soft);
+	color: var(--jt-accent);
+}
+.jt-mobile-menu__external::after {
+	content: " ↗";
+	color: var(--jt-faint);
+	font-weight: 400;
+}

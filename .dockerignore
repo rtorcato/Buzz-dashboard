@@ -1,0 +1,12 @@
+.git
+.github
+.next
+node_modules
+coverage
+.env*
+!.env.example
+*.md
+Dockerfile
+compose.yaml
+apps/docs/*
+!apps/docs/package.json
