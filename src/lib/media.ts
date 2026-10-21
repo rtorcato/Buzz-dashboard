@@ -72,7 +72,8 @@ export function parseKey(o: MediaObject): MediaFile {
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg)$/i;
 export const isImage = (name: string) => IMAGE_EXT.test(name);
 
-// Keys from media_put.sh are URL-safe, but "other" keys can hold anything.
+// Keys laid out as <repo>/<date>/<file> are URL-safe, but "other" keys can
+// hold anything.
 const encodeKey = (key: string) =>
   key.split("/").map(encodeURIComponent).join("/");
 
