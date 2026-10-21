@@ -326,7 +326,7 @@ function RuntimeDetail({
     return (
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
         <CircleHelp className="size-4 shrink-0" aria-hidden />
-        Not reported. This agent has no log on the Mac.
+        Not reported. The status feed has no runtime for this agent.
       </p>
     );
   }

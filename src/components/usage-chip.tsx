@@ -155,7 +155,7 @@ export function UsageChip({
               )}
             </p>
             <p className="opacity-70" suppressHydrationWarning>
-              Reading {formatAge(age * 1000)} ago, from the Mac
+              Reading {formatAge(age * 1000)} ago, from the status feed
             </p>
           </>
         )}

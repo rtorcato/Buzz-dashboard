@@ -133,11 +133,12 @@ export default async function MediaPage({ searchParams }: PageProps<"/media">) {
 
       {files.length === 0 ? (
         <EmptyState icon={Images} title="No media yet">
-          Agents upload with{" "}
+          Files in the bucket are grouped by key, laid out as{" "}
           <span className="font-mono text-[13px]">
-            media_put.sh &lt;repo&gt; &lt;file&gt;
+            &lt;repo&gt;/YYYY-MM-DD/&lt;file&gt;
           </span>
-          . New files show up here within a minute.
+          . Anything else is listed under other. New files show up here within a
+          minute.
         </EmptyState>
       ) : sections.length === 0 ? (
         <EmptyState icon={Images} title={`Nothing in ${repo}`}>

@@ -10,8 +10,11 @@ case "${1:-up}" in
     if [[ ! -f .env ]]; then
       cp .env.example .env
       echo "Created .env from .env.example. Fill in these vars, then run this again:"
-      echo "  BUZZ_RELAY_URL BUZZ_PRIVATE_KEY MEDIA_BASE_URL"
-      echo "  R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY"
+      echo "  BUZZ_RELAY_URL BUZZ_PRIVATE_KEY"
+      echo "  GITHUB_TOKEN GITHUB_OWNERS"
+      echo "  BUZZ_OWNER_PUBKEY or BUZZ_AUTH_TAG (one of them)"
+      echo "Optional: MEDIA_BASE_URL and R2_* (the Media tab and status feed;"
+      echo "  without them those views show \"source down\")."
       exit 1
     fi
     docker compose up --build -d
