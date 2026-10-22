@@ -6,11 +6,14 @@
 :root {
 	--ifm-color-primary: #a35d00;
 	--jt-accent: #a35d00;
+	/* AA for small text on white and --jt-bg2. Same greys as shared-docs#170: drop this once that release ships. */
+	--jt-faint: #5f6b7a;
 }
 
 [data-theme="dark"] {
 	--ifm-color-primary: #e19b34;
 	--jt-accent: #e19b34;
+	--jt-faint: #768397;
 }
 
 /* Mobile drawer: one flat menu (see src/theme/Navbar/MobileSidebar). */
