@@ -18,8 +18,8 @@ importers:
         specifier: ^3.0.0
         version: 3.0.0
       '@rtorcato/js-common':
-        specifier: ^6.0.0
-        version: 6.0.0(zod@4.6.7)
+        specifier: ^6.0.1
+        version: 6.0.1(zod@4.6.7)
       aws4fetch:
         specifier: ^1.0.20
         version: 1.0.20
@@ -2104,8 +2104,8 @@ packages:
     resolution: {integrity: sha512-Oxz22X/e0xJw0CyKpuAmNnv2YUk5bnrI/3mVPEzVhs+GRvyxELFODmVamk2WUJzEnGUNX3OYT0mTzY+8KffTDg==}
     engines: {node: '>=22'}
 
-  '@rtorcato/js-common@6.0.0':
-    resolution: {integrity: sha512-c6LukE8Kxm9FDhVQ77YncaNJzp7qyV9u72PRRR5y73+rG7bWcuZojuHxaGc5vknzpZHpmNoUjqt+0PjyqNMQpw==}
+  '@rtorcato/js-common@6.0.1':
+    resolution: {integrity: sha512-Fpo1Dh+X0pLsYxK065gAeYtPsDKOK9VO/v91w5dC5MeT1Q+sM8wGBx0qhWw5wUSqavV72/y5eCrStlbPfC8dng==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
@@ -9493,7 +9493,7 @@ snapshots:
 
   '@rtorcato/browser-common@3.0.0': {}
 
-  '@rtorcato/js-common@6.0.0(zod@4.6.7)':
+  '@rtorcato/js-common@6.0.1(zod@4.6.7)':
     optionalDependencies:
       zod: 4.6.7
 
