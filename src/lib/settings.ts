@@ -1,3 +1,9 @@
+import {
+  getLocalStorage,
+  isLocalStorageAvailable,
+  removeLocalStorage,
+  setLocalStorage,
+} from "@rtorcato/browser-common/localstorage";
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 
@@ -84,11 +90,9 @@ let lastRaw: string | null | undefined;
 let cached = DEFAULTS;
 
 function read(): string | null {
-  try {
-    return localStorage.getItem(SETTINGS_KEY);
-  } catch {
-    return null;
-  }
+  // The library parses the stored JSON; serialise it again so parseSettings gets the raw text.
+  const stored = getLocalStorage(SETTINGS_KEY);
+  return stored === null ? null : JSON.stringify(stored);
 }
 
 export { getSnapshot as getSettings };
@@ -115,20 +119,23 @@ function subscribe(onChange: () => void) {
   };
 }
 
-function write(next: string | null) {
+function write(next: Settings | null) {
   try {
-    if (next === null) localStorage.removeItem(SETTINGS_KEY);
-    else localStorage.setItem(SETTINGS_KEY, next);
+    // The library skips blocked storage without throwing, so check it here.
+    if (!isLocalStorageAvailable()) throw new Error("storage blocked");
+    if (next === null) removeLocalStorage(SETTINGS_KEY);
+    else setLocalStorage(SETTINGS_KEY, next);
   } catch {
-    // Storage blocked: the preference lasts until the page reloads.
-    lastRaw = next;
-    cached = parseSettings(next);
+    // Storage blocked or full: the preference lasts until the page reloads.
+    const raw = next === null ? null : JSON.stringify(next);
+    lastRaw = raw;
+    cached = parseSettings(raw);
   }
   for (const l of listeners) l();
 }
 
 export function updateSettings(patch: Partial<Settings>) {
-  write(JSON.stringify({ ...getSnapshot(), ...patch }));
+  write({ ...getSnapshot(), ...patch });
 }
 
 export function resetSettings() {
