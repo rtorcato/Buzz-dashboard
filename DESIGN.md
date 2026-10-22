@@ -137,7 +137,7 @@ The runtime and usage data come from one JSON file, object key `hive/status.json
 
 > **Status:** approved by rtorcato on 2026-10-09. UI PRs can build against it.
 
-A gallery of every file the agents upload to the public R2 media bucket, served at `<media-host>`. The app reads the base URL from the `MEDIA_BASE_URL` env var (e.g. `https://media.torcato.dev`) and never hardcodes a domain. Keys are `<repo>/<YYYY-MM-DD>/<file>`, written only by `~/.buzz/bin/media_put.sh`.
+A gallery of every file the agents upload to the public R2 media bucket, served at `<media-host>`. The app reads the base URL from the `MEDIA_BASE_URL` env var (e.g. `https://media.torcato.dev`) and never hardcodes a domain. Keys are `<repo>/<YYYY-MM-DD>/<file>`, written by your upload tool.
 
 - **Header row:** "Media", then "`70` files in `<media-host>` · newest first" (the host part of `MEDIA_BASE_URL`). On the right, a repo `Select` ("All repos" or one repo, also set by `?repo=`) and an outline "Bucket" link to the bucket in the Cloudflare dashboard (`external-link`).
 - **Grouping:** by repo, then by date, newest first. Repos are ordered by their newest upload. Each repo header has a `folder` icon, the repo name in mono, a muted file-count pill and a "View all" link that sets the repo filter. Each date label reads "Wed Oct 7 · 6" (muted, `text-xs`).
@@ -145,7 +145,7 @@ A gallery of every file the agents upload to the public R2 media bucket, served 
 - **Grid:** 2 columns on phones, 3 at `sm`, 4 at `lg`, 5 at `xl`. Gap 12px on phones, 16px above.
 - **Tile** (a `Card`): a 4:3 thumbnail on `bg-muted`, `object-cover object-top` (screenshots read from the top), then a footer row with the filename (Geist Mono 13px, truncated, full key in `title`), the time and size (`text-xs`, muted), and a ghost icon `Button` (`size-9`, `link` icon, `aria-label="Copy link to <file>"`). The copy button is always visible, never hover-only.
   - **Thumbnail URL:** `${MEDIA_BASE_URL}/cdn-cgi/image/width=480,format=auto/<key>` for png, jpg, webp and gif. SVGs load the original. Use `loading="lazy"` and `decoding="async"`.
-  - **Not an image** (html, pdf, …): the thumbnail area shows a `file-code` icon (or `file`) and the extension. Clicking it **downloads** the file and never renders it, and the footer icon is `download` instead of `link`. The bucket is public, so an `.html` file rendered from the media host would run as a live page on that domain. `media_put.sh` therefore uploads every non-image file with `Content-Disposition: attachment`, and the tile link also carries the `download` attribute.
+  - **Not an image** (html, pdf, …): the thumbnail area shows a `file-code` icon (or `file`) and the extension. Clicking it **downloads** the file and never renders it, and the footer icon is `download` instead of `link`. The bucket is public, so an `.html` file rendered from the media host would run as a live page on that domain. Any uploader must therefore send every non-image file with `Content-Disposition: attachment`, and the tile link also carries the `download` attribute.
   - **Thumbnail fails to load:** keep the tile's size and show `image-off` with "No preview" (see States).
 - **Copy:** `navigator.clipboard.writeText(url)`. The button turns into a success check plus "Copied" (icon only on phones) for 2s, announced through `role="status"`.
 - **Viewer** (shadcn `Dialog`): opens when a thumbnail is clicked. On desktop it's inset 24px with a max width of 6xl. On phones it fills the screen.
