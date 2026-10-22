@@ -6,6 +6,7 @@ The design spec for buzz-dashboard. Read it before writing any UI code, and keep
 - **Designer:** Zoey (2026-10-07)
 - **Update:** runtime status (#24), the usage meter (#25), the agent page (#27) and Motion, approved by rtorcato on 2026-10-16. They read the status feed (#26), so build them after it.
 - **Update:** the fixed sidebar and the Settings page (#58), approved by rtorcato on 2026-10-21.
+- **Update:** the docs site home page (see Docs site), approved by rtorcato on 2026-10-22.
 - **Mockups:** kept outside the repo and not linked from it. This file is the spec, so build from the text below.
 
 ## Principle
@@ -229,6 +230,59 @@ No Lottie on these screens. A looping illustration pulls the eye on a screen you
 
 - **Build the agent roster from pubkeys, deduplicated.** The relay holds several profiles under the same name, and older names (for example Fizz and Comb) belong to agents that have since been renamed. Show one card per live agent, not one per profile.
 - **Show repo names exactly as GitHub returns them.** Don't change their case.
+
+## Docs site
+
+The docs site (`apps/docs`, Docusaurus v3, themed by shared-docs) leads with the real dashboard, so a visitor sees what they get before reading a word. The home page answers "what does it look like?" with screenshots, not text cards.
+
+It stays inside Docusaurus: only `src/pages/index.tsx` and `index.module.css` change, plus a token override in `src/css/custom.css`. Docs pages, navbar, sidebar, Siblings and the shared footer are untouched. Use Infima buttons (`button button--primary button--lg`, `button--secondary`), the shared `--jt-*` tokens and the honey `--ifm-color-primary` the site already ships. Honey is fine here: the "amber means waiting" rule is for the app, not its marketing page.
+
+### Home page, top to bottom
+
+1. **Hero** (centred, max 1120px).
+   - Eyebrow pill in Geist Mono 13px with a green dot: "Read-only · self-hosted · one Docker image".
+   - `h1` (clamp 2.5rem to 4rem, weight 800, tracking -0.035em): "Does anything need you *right now?*", with "right now?" in the accent colour (a `<span>`, not `<em>`, so it isn't read as emphasis).
+   - Lede (1.25rem, `--jt-muted`, max 40rem): "A dashboard for your Buzz hive. See what every agent is doing and which pull requests are waiting on you, without scrolling a single channel."
+   - CTAs: primary "Get started →" to `/docs/quick-start`, secondary "View on GitHub" to the repo.
+   - A browser frame below the CTAs: 38px bar with three dots and a fake URL `hive.your-network.internal/agents` in mono, then the Agents screenshot. 1px `--jt-border` border, 14px top radius, no bottom border, a soft drop shadow, and a 120px fade into the page background at the bottom. A faint accent radial glow (14% light, 18% dark) sits behind the hero.
+2. **"What you get today"**: kicker, `h2` "One page instead of every channel.", sub "Built for people running several agents that open issues and PRs. These are real views, shown with sample data." Then four feature rows, alternating image side (5fr copy / 7fr image, 56px gap, 72px between rows). Each row has a mono uppercase kicker in the accent, an `h3`, one paragraph and 2–3 ticks (an 18px accent-tinted check tile). Images sit in a 14px-radius bordered card with the same shadow.
+   - **Needs you** (image right): "The answer sits on top of every view." Ticks: pull requests labelled merge-ready; a hive paused for usage, with a countdown to the reset; usage meters for the 5-hour and 7-day windows. Image: the Needs-you card crop.
+   - **Agents** (image left): "Every agent at a glance." Ticks: running or stopped, uptime and last turn; what it is working on, from its latest message; home channel, messages today and a 7-day sparkline. Image: the agent grid crop.
+   - **Agent page** (image right): "Drill into one agent." No ticks. "Runtime, model and activity over 7, 14 or 30 days. Claims and recent PRs join this page with the GitHub reader."
+   - **Media** (image left): "Mockups and screenshots, by repo and day." No ticks. "Point it at your R2 bucket and every upload shows up within a minute, grouped by repo and date, with a copy-link button on each file."
+3. **Phone band** (`--jt-bg2` background, 1px borders top and bottom): copy left ("On your phone" / "Check the hive from anywhere on your network" / "The same views fit a phone. Put it behind Tailscale or Cloudflare Access and glance at it between meetings."), two phone frames right (250 × 470, 40px radius, 10px ink bezel), dark first, light second offset 48px down.
+4. **Principles** ("Small on purpose"): the three existing pillars, unchanged copy except the third ("No login, so it stays on your network."), each with a 36px accent-tinted icon tile: lucide `eye`, `bell`, `box`.
+5. **Quick start** ("Running in two minutes", "Three relay settings in an env file, then one command."): copy and a primary "Read the quick start →" left, a code block right with the `.env` (`BUZZ_RELAY_URL`, `BUZZ_PRIVATE_KEY`, `BUZZ_OWNER_PUBKEY`) and the `docker run … -p 127.0.0.1:3000:3000 ghcr.io/rtorcato/buzz-dashboard:<tag>` line. Use Docusaurus `CodeBlock` (`@theme/CodeBlock`, `language="bash"`) so it gets the copy button and theme colours. Keep it in step with `docs/quick-start.md`.
+6. **Next views** ("On the way"): three cards, Pipeline, Releases and Timeline, each with a dashed mono "Planned" pill and one line. Drop a card once its view ships and add a feature row for it.
+7. **Siblings** and the **footer**: unchanged.
+
+**Responsive:** below 996px (Infima's `--ifm` mobile breakpoint) the feature rows stack, image after copy whatever the desktop side, and the phone band stacks with the phones centred. Below 640px show one phone only (dark), and drop the browser-frame bar so the screenshot gets the width.
+
+### Screenshots
+
+- Real views running on sample data only. No real names, pubkeys, channels, repos or bucket keys. Sample repos are `example-app` style names.
+- One light and one dark file per shot, in `apps/docs/static/img/screens/`: `agents`, `needs-you`, `agents-grid`, `agent-page`, `media` (desktop, 1440 × 900 viewport at 2x) and `mobile` (390 × 844 at 3x). `needs-you` and `agents-grid` are element captures of those regions of the Agents view, not CSS background crops, so they scale and carry their own alt text.
+- Each pair renders through `@theme/ThemedImage` so the theme toggle swaps it. Wrap every `ThemedImage` in a `div` that carries the module class: ThemedImage sets `display: initial`, which beats a class put on it directly.
+- Ship WebP (quality 82). Give every `img` `width` and `height` to avoid layout shift, `loading="lazy"` below the hero and `fetchpriority="high"` on the hero.
+- A capture script regenerates the whole set when the UI changes, so nobody hand-crops. It starts the app in a sample-data mode, freezes the clock, and walks each view in both themes.
+
+**Alt text** (keep it this specific):
+
+| Shot | Alt |
+|---|---|
+| `agents` | The buzz-dashboard Agents view: a Needs-you card with three PRs ready to merge, four stat tiles, and a grid of agent cards with status, runtime and a 7-day sparkline. |
+| `needs-you` | The Needs-you card listing PRs ready to merge and a usage pause with its reset countdown. |
+| `agents-grid` | Agent cards, each with an avatar, status badge, runtime row, latest message and a 7-day sparkline. |
+| `agent-page` | An agent page: avatar, Active badge, runtime strip, stat tiles and a Runtime panel. |
+| `media` | The Media view: thumbnails grouped under example-app by date. |
+| `mobile` | The Agents view on a phone. The first (dark) phone carries this alt; the second (light) phone is the same view, so it gets `alt=""`. |
+
+### Accessibility
+
+- Raise `--jt-faint` for this site in `custom.css`: `#646f7e` light (5.1:1 on white, 4.8:1 on `--jt-bg2`) and `#7f8b9d` dark (5.6:1 on `--jt-bg`, 5.2:1 on `--jt-surface`). The shared values (`#8a95a5` 3.0:1 on white, `#647184` 3.9:1 on `#0a0e16`) fail AA for small text.
+- Body text, muted text and the accent all pass AA in both themes: `--jt-muted` 5.8:1 light and 7.4:1 dark; honey `#a35d00` 5.1:1 on white; `#e19b34` on `#0a0e16` 8.2:1. The primary button's ink label on honey is 8.2:1 too.
+- The fake browser bar, the glow, the check tiles and the icon tiles are decorative (`aria-hidden`). Headings stay in order: one `h1`, `h2` per band, `h3` per feature row.
+- No motion. Nothing on this page needs it.
 
 ## Brand
 
