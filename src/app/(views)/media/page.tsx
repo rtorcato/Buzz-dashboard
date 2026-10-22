@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { ChevronDown, ExternalLink, Images } from "lucide-react";
+import { ChevronDown, Images } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -117,18 +117,6 @@ export default async function MediaPage({ searchParams }: PageProps<"/media">) {
         </div>
         <div className="flex gap-2">
           <RepoSelect repos={groups.map((g) => g.repo)} value={repo} />
-          <a
-            href={`https://dash.cloudflare.com/${env.accountId}/r2/default/buckets/${encodeURIComponent(env.bucket)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(
-              buttonVariants({ variant: "outline" }),
-              "hidden h-9 sm:inline-flex",
-            )}
-          >
-            Bucket
-            <ExternalLink aria-hidden />
-          </a>
         </div>
       </div>
 
