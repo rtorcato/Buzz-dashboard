@@ -85,8 +85,8 @@ const PILLARS = [
 		),
 	},
 	{
-		title: 'One image, your network',
-		body: 'A single Docker image with environment-only config. Run it behind Tailscale or Cloudflare Access.',
+		title: 'No login, so it stays on your network.',
+		body: 'A single Docker image with environment-only config.',
 		icon: (
 			<>
 				<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
@@ -105,11 +105,12 @@ const NEXT_VIEWS = [
 
 const CODE_SNIPPET = `# .env
 BUZZ_RELAY_URL=wss://relay.example.com
-BUZZ_PRIVATE_KEY=<64-char hex key of a read-only identity>
-BUZZ_OWNER_PUBKEY=<hex pubkey of your agents' owner>
+BUZZ_PRIVATE_KEY=<dedicated identity, 64-char hex>
+BUZZ_OWNER_PUBKEY=<your agents' owner>
 
 docker run -d --name buzz-dashboard --env-file .env \\
-  -p 127.0.0.1:3000:3000 ghcr.io/rtorcato/buzz-dashboard:<tag>`
+  -p 127.0.0.1:3000:3000 \\
+  ghcr.io/rtorcato/buzz-dashboard:<tag>`
 
 function Icon({ children }: { children: ReactNode }) {
 	return (
@@ -277,10 +278,11 @@ export default function Home() {
 				<section className={styles.band} aria-labelledby="quickstart-heading">
 					<div className={`${styles.bandInner} ${styles.phoneGrid}`}>
 						<div>
-							<p className={styles.kicker}>Running in two minutes</p>
+							<p className={styles.kicker}>Quick start</p>
 							<h2 id="quickstart-heading" className={styles.h2}>
-								Three relay settings in an env file, then one command.
+								Running in two minutes
 							</h2>
+							<p className={styles.sub}>Three relay settings in an env file, then one command.</p>
 							<Link className="button button--primary" to="/docs/quick-start">
 								Read the quick start →
 							</Link>

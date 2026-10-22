@@ -395,6 +395,10 @@
 }
 
 @media (max-width: 639px) {
+	.eyebrow {
+		font-size: 12px;
+	}
+
 	.browserBar {
 		display: none;
 	}
