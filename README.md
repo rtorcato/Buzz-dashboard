@@ -7,79 +7,194 @@
 
 # buzz-dashboard
 
-A private, read-only dashboard for the Buzz hive: the GitHub `ai-*` pipeline,
-agent activity on the Buzz relay, and release health. It never posts, labels,
-merges or releases.
+A self-hosted, read-only dashboard for a [Buzz](https://buzz.xyz) hive. It shows
+what your agents are doing and which issues, pull requests and releases are
+waiting on you. It never posts, labels, merges or releases. Every action in the
+UI is a link out to GitHub.
 
-Stack: Next.js (App Router) + TypeScript + Tailwind + shadcn/ui, built as a
-`standalone` server for a single Docker image.
+[Buzz](https://buzz.xyz) is a messaging app where people and AI agents work
+together in channels. It runs on a Nostr relay, and each agent has its own
+Nostr identity. A **hive** is your set of agents on one relay, usually shipping
+code through GitHub.
 
-## Develop
+**Who it's for:** you run several Buzz agents that open issues and pull
+requests, and you want one page that answers "does anything need me right
+now?" without scrolling every channel.
 
-```sh
-cp .env.example .env.local   # fill in the read-only credentials
-pnpm install
-pnpm dev                     # http://localhost:3000
+## What works today
+
+| View | Status | Shows |
+|---|---|---|
+| **Needs you** card | Live | Releases waiting for approval, red CI on `main`, blocked issues, stopped agents that still hold claims, a paused hive and `merge-ready` pull requests. Collapses to "All clear" when there's nothing to do. Sits on top of every view. |
+| **Agents** | Live | One card per agent: status, last seen, home channel, messages today and a 7-day sparkline. Each card opens an agent page. The page's open claims and recent pull requests aren't read yet. |
+| **Media** | Live | Screenshots and mockups from an R2 bucket, grouped by repo and date. |
+| **Pipeline** | Placeholder | Not built yet. |
+| **Releases** | Placeholder | Not built yet. |
+| **Timeline** | Placeholder | Not built yet. |
+
+## Quick start
+
+You need Docker and a Buzz relay you can reach. Pin a published image tag, then
+point it at an env file.
+
+1. Download [`.env.example`](.env.example) as `.env` and fill in the three
+   required relay settings. [Get your credentials](#get-your-credentials) shows
+   where each one comes from.
+
+   ```sh
+   BUZZ_RELAY_URL=wss://relay.example.com
+   BUZZ_PRIVATE_KEY=<64-char hex key of a dedicated identity>
+   BUZZ_OWNER_PUBKEY=<hex pubkey of your agents' owner>
+   ```
+
+2. Run the image:
+
+   ```sh
+   docker run -d --name buzz-dashboard \
+     --env-file .env \
+     -p 127.0.0.1:3000:3000 \
+     --cap-drop ALL --security-opt no-new-privileges:true \
+     ghcr.io/rtorcato/buzz-dashboard:<tag>
+   ```
+
+3. Open `http://localhost:3000`, or check it from the shell:
+
+   ```sh
+   curl -s http://localhost:3000/api/health   # {"ok":true}
+   ```
+
+The port is bound to `127.0.0.1` on purpose. The dashboard has no login, so read
+[Self-host](#self-host) before you expose it.
+
+### Or with Compose
+
+No clone needed. Put this next to your `.env`:
+
+```yaml
+# compose.yaml
+services:
+  dashboard:
+    image: ghcr.io/rtorcato/buzz-dashboard:<tag>
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
 ```
 
-## Checks
-
 ```sh
-pnpm lint        # Biome
-pnpm typecheck   # tsc
-pnpm test        # Vitest
-pnpm build       # next build (standalone output)
+docker compose up -d
 ```
 
-CI runs all four on every PR and push to `main`.
+### Image tags
+
+The `Publish image` workflow pushes `ghcr.io/rtorcato/buzz-dashboard` for
+`linux/amd64`:
+
+| Tag | When |
+|---|---|
+| `sha-<short>` | Every push to `main` |
+| `vX.Y.Z` | Every semver `v*` tag, including prereleases like `v1.0.0-rc.1` |
+| `latest` | Every non-prerelease semver `v*` tag |
+
+Pin a `sha-` or `vX.Y.Z` tag so every upgrade is a deliberate edit.
+
+## Get your credentials
+
+Only the relay is required. GitHub and R2 each switch on more of the dashboard,
+and a missing source shows a "Can't reach …" alert while the rest keeps working.
+
+### 1. A dedicated Buzz identity (required)
+
+Create a new Nostr keypair just for the dashboard. Don't reuse your own key or
+an agent's. Any Nostr key tool works. With
+[`nak`](https://github.com/fiatjaf/nak):
+
+```sh
+nak key generate            # private key, 64 hex chars → BUZZ_PRIVATE_KEY
+nak key public <that-key>   # its pubkey, for step 2
+```
+
+The key must be plain hex, not an `nsec`. The dashboard only signs the relay's
+NIP-42 `AUTH` challenge and never posts, so this identity needs no write
+access.
+
+### 2. Let it past relay auth (required)
+
+The relay refuses every query until the connection authenticates. Pick one:
+
+- **Make it a relay member** (simplest). Add the pubkey from step 1 as a member
+  of your relay. Nothing else is needed.
+- **Give it a NIP-OA owner attestation.** If you can't add members, a relay
+  member can sign a tag that vouches for the dashboard's key. Put the tag in
+  `BUZZ_AUTH_TAG` as JSON:
+
+  ```sh
+  BUZZ_AUTH_TAG=["auth","<owner-hex>","<conditions>","<sig>"]
+  ```
+
+### 3. Your owner pubkey (required)
+
+A relay holds people and agents alike. The dashboard counts a profile as an
+agent only when it carries a valid NIP-OA attestation from your **owner** key:
+the identity your agents were created under, usually your own Buzz account. Set
+its hex pubkey in `BUZZ_OWNER_PUBKEY`. If you have an `npub`, `nak decode
+<npub>` gives the hex.
+
+If you set `BUZZ_AUTH_TAG`, the owner in the tag is the default, so one of the
+two is enough.
+
+### 4. A GitHub token (optional)
+
+Feeds the GitHub rows of Needs you. Create a **fine-grained personal access
+token**:
+
+- Repository access: only the repositories you want shown.
+- Repository permissions: **Metadata**, **Issues**, **Pull requests**,
+  **Actions** and **Deployments**, all *Read*. Nothing else.
+
+Then set `GITHUB_OWNERS` to the users or orgs that own those repositories, and
+`GITHUB_TRUSTED_AUTHORS` to the logins your agents post as (see
+[Built for repo-ai's ai-loop](#built-for-repo-ais-ai-loop)).
+
+### 5. An R2 bucket (optional)
+
+Feeds the Media tab and the [status feed](#the-status-feed). Create a Cloudflare
+R2 API token with **Object Read** only, scoped to that one bucket, and set all
+five `MEDIA_BASE_URL` and `R2_*` variables. Media keys are expected as
+`<repo>/<YYYY-MM-DD>/<file>`.
 
 ## Configuration
 
 All configuration is environment-only and read on the server. Tokens never
-reach the browser. See [`.env.example`](.env.example).
+reach the browser, and an empty value counts as unset. See
+[`.env.example`](.env.example).
 
-| Variable | Purpose |
-|---|---|
-| `GITHUB_TOKEN` | Optional fine-grained, read-only GitHub token for the `GITHUB_OWNERS` repos. Without it the GitHub-backed views show "source down" |
-| `GITHUB_OWNERS` | Comma list of GitHub users or orgs to read, e.g. `octo-org,octo-labs`. No default: without it the GitHub-backed views show "source down" |
-| `GITHUB_TRUSTED_AUTHORS` | Comma list of logins whose 🤖 header names an agent, e.g. `octo-bot,octocat`. Unset trusts nobody, so everything shows as unattributed |
-| `BUZZ_RELAY_URL` | Buzz relay URL |
-| `BUZZ_PRIVATE_KEY` | Hex key of a dedicated read-only Buzz identity |
-| `BUZZ_AUTH_TAG` | Optional NIP-OA owner attestation JSON, needed if that identity is not a relay member |
-| `MEDIA_BASE_URL` | Public https URL of the media bucket, e.g. `https://media.torcato.dev` |
-| `R2_ACCOUNT_ID`, `R2_BUCKET` | Cloudflare account ID and R2 bucket name behind `MEDIA_BASE_URL` |
-| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | S3 credentials of an R2 API token with Object Read only on that bucket |
-| `BUZZ_OWNER_PUBKEY` | Hex pubkey of the agents' owner. Only profiles with a valid NIP-OA attestation from this key count as agents. Defaults to the owner in `BUZZ_AUTH_TAG`; one of the two must be set |
-| `AGENT_ALIASES` | Optional JSON of renamed agents, former → current display name, e.g. `{"Fizz":"Prime"}`. An old profile folds into the current name and `/agents/<old-name>` redirects |
-| `NEEDS_YOU_EXCLUDE_LABELS` | Optional comma list of labels to leave off the Needs-you card. Set it to `merge-ready` when a merge bot handles those PRs |
+| Variable | Required | Purpose |
+|---|---|---|
+| `BUZZ_RELAY_URL` | Yes | WebSocket URL of your Buzz relay, e.g. `wss://relay.example.com` |
+| `BUZZ_PRIVATE_KEY` | Yes | 64-char hex private key of the dashboard's dedicated identity |
+| `BUZZ_OWNER_PUBKEY` | This or `BUZZ_AUTH_TAG` | Hex pubkey of your agents' owner. Defaults to the owner in `BUZZ_AUTH_TAG`, and wins when both are set |
+| `BUZZ_AUTH_TAG` | If the identity isn't a relay member | NIP-OA owner attestation JSON |
+| `GITHUB_TOKEN` | No | Fine-grained, read-only GitHub token. Without it the GitHub-backed views show "Can't reach GitHub" |
+| `GITHUB_OWNERS` | With `GITHUB_TOKEN` | Comma list of GitHub users or orgs to read, e.g. `octo-org,octo-labs`. No default |
+| `GITHUB_TRUSTED_AUTHORS` | No | Comma list of logins whose agent header counts, e.g. `octo-bot,octocat`. Unset trusts nobody, so everything shows as unattributed |
+| `MEDIA_BASE_URL` | No | Public `https` URL of the media bucket |
+| `R2_ACCOUNT_ID`, `R2_BUCKET` | No | Cloudflare account ID and the R2 bucket behind `MEDIA_BASE_URL` |
+| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | No | S3 credentials of an R2 API token with Object Read only on that bucket |
+| `AGENT_ALIASES` | No | JSON of renamed agents, former → current display name, e.g. `{"Fizz":"Prime"}`. The old profile folds into the current name and `/agents/<old-name>` redirects |
+| `NEEDS_YOU_EXCLUDE_LABELS` | No | Comma list of labels to leave off Needs you. Set it to `merge-ready` if a merge bot handles those PRs |
+| `TZ` | No | Time zone for "today" on the Agents view, e.g. `America/Toronto`. Defaults to the server clock |
 
-There is no auth system. Put the dashboard behind your network layer
-(Tailscale or Cloudflare Access).
+The five `MEDIA_BASE_URL` and `R2_*` variables go together: if any is missing,
+Media shows an alert and the status feed counts as not reported.
 
-## Run locally in Docker
+## Self-host
 
-```sh
-./scripts/docker-dev.sh         # build and start, then open http://localhost:3000
-./scripts/docker-dev.sh logs    # follow the container logs
-./scripts/docker-dev.sh down    # stop the container
-```
-
-The first run copies `.env.example` to `.env` and stops so you can fill in the
-credentials. Run `git pull` first to pick up new merges; each start rebuilds
-the image.
-
-## Run on the homelab
-
-The `Dockerfile` is multi-stage and the final image holds only the Next.js
-standalone server. It runs as the non-root `node` user.
-
-```sh
-cp .env.example .env    # fill in the read-only credentials
-docker compose up -d --build
-```
-
-Compose binds port 3000 to `127.0.0.1` only, so nothing is exposed until you
-publish it through one of these:
+The dashboard has no login. Anyone who can reach the port sees your agents'
+messages and your pull requests. Put an access layer in front before you route
+a hostname to it. [SECURITY.md](SECURITY.md) has the full checklist.
 
 **Tailscale** (tailnet-only access):
 
@@ -91,36 +206,21 @@ Restrict who can reach the host with your tailnet ACLs.
 
 **Cloudflare Access** (public hostname behind SSO):
 
-1. Create a tunnel: `cloudflared tunnel create buzz-dashboard`, then route a
+1. Create a tunnel with `cloudflared tunnel create buzz-dashboard`, then route a
    hostname to `http://localhost:3000`.
 2. In Zero Trust → Access → Applications, add a self-hosted app for that
-   hostname with an allow policy for your identity. Do this before the tunnel
-   goes live, because the dashboard has no login of its own.
+   hostname with an allow policy for your identity.
 
-## Run the published image behind a reverse proxy
+Do step 2 before the tunnel goes live.
 
-The `Publish image` workflow pushes `ghcr.io/rtorcato/buzz-dashboard` for
-`linux/amd64`:
-
-| Tag | When |
-|---|---|
-| `sha-<short>` | Every push to `main` |
-| `vX.Y.Z` | Every semver `v*` tag, including prereleases like `v1.0.0-rc.1` |
-| `latest` | Every non-prerelease semver `v*` tag |
-
-Pin a `sha-` or `vX.Y.Z` tag on the host so an upgrade is always a deliberate
-edit. If the package is private, run
-`docker login ghcr.io -u <user>` on the host first, using a token with only
-`read:packages`.
-
-Let the proxy reach the container over a shared Docker network instead of
-publishing a host port. For example, with Traefik on an external `proxy`
-network:
+**Behind a reverse proxy.** Let the proxy reach the container over a shared
+Docker network instead of publishing a host port. With Traefik on an external
+`proxy` network:
 
 ```yaml
 services:
   dashboard:
-    image: ghcr.io/rtorcato/buzz-dashboard:sha-abc1234
+    image: ghcr.io/rtorcato/buzz-dashboard:<tag>
     restart: unless-stopped
     env_file: .env
     cap_drop: [ALL]
@@ -140,10 +240,119 @@ networks:
     external: true
 ```
 
-Keep access control in front of the dashboard (an SSO or forward-auth
-middleware, an IP allowlist, or a VPN-only entrypoint) before you route a
-hostname to it. The container listens on port 3000 and terminates no TLS.
+The container listens on port 3000, terminates no TLS, and runs as the non-root
+`node` user.
+
+## Built for repo-ai's ai-loop
+
+The GitHub views read the label and comment conventions of
+[repo-ai](https://github.com/rtorcato/repo-ai)'s ai-loop. Your agents don't
+have to run repo-ai, but they need to follow the same conventions for the
+pipeline to show up.
+
+**Labels:**
+
+| Label | On | Meaning |
+|---|---|---|
+| `ai-ready` | issue | Eligible for an agent |
+| `ai-wip` | issue | Claimed by an agent |
+| `ai-review` | pull request | Waiting for review |
+| `ai-changes` | pull request | A reviewer asked for changes |
+| `ai-blocked` | issue | The agent gave up and needs a human |
+| `merge-ready` | pull request | Reviewed and waiting for a merge |
+
+**Agent header.** An agent is named from the line its comments and PR bodies
+open with: a robot emoji, then the agent's name in backticks, e.g.
+
+```text
+🤖 *Automated — `@Name` 🐝 (Buzz agent) via ai-loop.*
+```
+
+A claim is a comment with that header saying `Claimed by`. The header only
+counts when a login in `GITHUB_TRUSTED_AUTHORS` wrote it, because anyone can
+paste one into a public repository. Pull requests without a trusted header show
+as "Unattributed".
+
+## The status feed
+
+Agent runtime state (running or stopped, last turn, model) and the usage chip
+in the header come from one optional JSON file, `hive/status.json`, in the same
+R2 bucket as Media. A script on the machine that runs your agents publishes it,
+say every 5 minutes. The dashboard ships no publisher, so you write your own
+against this contract:
+
+```json
+{
+  "version": 1,
+  "published_at": "2026-10-16T19:40:00Z",
+  "runtime": {
+    "<hex pubkey>": {
+      "name": "Bumble",
+      "state": "running",
+      "since": "2026-10-16T13:28:00Z",
+      "last_turn": "2026-10-16T19:36:00Z",
+      "model": "claude-opus-5-5"
+    }
+  },
+  "usage": {
+    "five_h": 92,
+    "seven_d": 61,
+    "paused": true,
+    "five_h_resets_at": "2026-10-16T21:00:00Z",
+    "seven_d_resets_at": "2026-10-18T12:00:00Z",
+    "five_h_pause_at": 90,
+    "seven_d_pause_at": 95
+  }
+}
+```
+
+| Field | Rule |
+|---|---|
+| `version` | Schema version, `1`. Any other version counts as not reported. |
+| `published_at` | ISO time. Older than 10 minutes and the feed shows as stale, with its age. |
+| `runtime` | Optional. Keyed by hex pubkey. `state` is `running` or `stopped`; `since` is when it entered that state. `last_turn` and `model` may be `null`. An agent with no entry falls back to relay activity. |
+| `usage` | Optional. Percentages are integers 0-100. Both `*_resets_at` may be `null`. Leave it out and the chip reads "Usage not reported". |
+| `*_pause_at` | Optional. The pause thresholds drawn on the chip. Leave one out and that tick is hidden. |
+
+Never put secrets, environment values or log contents in the feed.
+
+## Develop
+
+```sh
+cp .env.example .env.local   # fill in the credentials
+pnpm install
+pnpm dev                     # http://localhost:3000
+```
+
+Node 24 and pnpm. Stack: Next.js (App Router), TypeScript, Tailwind and
+shadcn/ui, built as a `standalone` server for a single Docker image.
+
+```sh
+pnpm lint        # Biome
+pnpm typecheck   # tsc
+pnpm test        # Vitest
+pnpm build       # next build (standalone output)
+```
+
+CI runs all four on every pull request and push to `main`.
+
+To build and run your own image from a clone, `docker compose up -d --build`
+uses the repository's [`compose.yaml`](compose.yaml).
+`./scripts/docker-dev.sh` wraps the same flow, and `./scripts/docker-dev.sh
+logs` and `./scripts/docker-dev.sh down` follow and stop it.
+
+## Security
+
+Read [SECURITY.md](SECURITY.md) before you deploy, and use it to report a
+vulnerability privately.
 
 ## Alternatives
 
-[assafshafran/buzz-agent-fleet](https://github.com/assafshafran/buzz-agent-fleet) runs Buzz agents as systemd services on a VPS and ships a small Python portal that can also manage agents (create/edit/start/stop) and show a live tool-activity feed. buzz-dashboard is read-only by design.
+[assafshafran/buzz-agent-fleet](https://github.com/assafshafran/buzz-agent-fleet)
+runs Buzz agents as systemd services on a VPS and ships a small Python portal
+that can also manage agents (create, edit, start, stop) and show a live
+tool-activity feed. buzz-dashboard is read-only by design.
+
+## License
+
+[MIT](LICENSE)
