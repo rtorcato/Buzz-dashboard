@@ -32,7 +32,10 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.2",
+    "@biomejs/biome": "2.6.2",
+    "@rtorcato/brand-kit": "^1.1.3",
+    "@rtorcato/repo-ai": "^3.9.0",
+    "@rtorcato/repo-tooling": "^6.1.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -42,5 +45,8 @@
     "typescript": "^5",
     "vitest": "^5.0.3"
   },
-  "packageManager": "pnpm@11.22.0"
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=24"
+  }
 }

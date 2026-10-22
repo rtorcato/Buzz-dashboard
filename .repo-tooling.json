@@ -1,0 +1,43 @@
+{
+  "$schema": "https://docs.torcato.dev/repo-tooling/schemas/lockfile.json",
+  "version": 4,
+  "record": {
+    "config": {
+      "language": "js",
+      "projectName": "buzz-dashboard",
+      "projectType": "nextjs-app",
+      "typescript": {
+        "enabled": true,
+        "config": "next"
+      },
+      "linting": {
+        "tool": "biome"
+      },
+      "formatting": {
+        "tool": "biome"
+      },
+      "testing": {
+        "framework": "vitest",
+        "environment": "node"
+      },
+      "gitHooks": false,
+      "commitLint": false,
+      "semanticRelease": false,
+      "securityAutomation": false,
+      "bundler": "none",
+      "aiSetup": false,
+      "docs": {
+        "url": "https://docs.torcato.dev/buzz-dashboard/",
+        "deploy": "cloudflare"
+      }
+    },
+    "writtenBy": "@rtorcato/repo-tooling@6.1.1",
+    "writtenAt": "2026-10-22T17:44:18.722Z"
+  },
+  "rules": {
+    "mcp": {
+      "recommended": []
+    },
+    "exceptions": {}
+  }
+}
