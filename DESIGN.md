@@ -279,7 +279,7 @@ It stays inside Docusaurus: only `src/pages/index.tsx` and `index.module.css` ch
 
 ### Accessibility
 
-- Raise `--jt-faint` for this site in `custom.css`: `#646f7e` light (5.1:1 on white, 4.8:1 on `--jt-bg2`) and `#7f8b9d` dark (5.6:1 on `--jt-bg`, 5.2:1 on `--jt-surface`). The shared values (`#8a95a5` 3.0:1 on white, `#647184` 3.9:1 on `#0a0e16`) fail AA for small text.
+- Raise `--jt-faint` for this site in `custom.css`: `#5f6b7a` light (5.4:1 on white, 5.1:1 on `--jt-bg2`) and `#768397` dark (5.0:1 on `--jt-bg`, 4.6:1 on `--jt-surface`). These match the shared-docs fix (rtorcato/shared-docs#170), so delete the override once this site picks up that release. The shared values (`#8a95a5` 3.0:1 on white, `#647184` 3.9:1 on `#0a0e16`) fail AA for small text.
 - Body text, muted text and the accent all pass AA in both themes: `--jt-muted` 5.8:1 light and 7.4:1 dark; honey `#a35d00` 5.1:1 on white; `#e19b34` on `#0a0e16` 8.2:1. The primary button's ink label on honey is 8.2:1 too.
 - The fake browser bar, the glow, the check tiles and the icon tiles are decorative (`aria-hidden`). Headings stay in order: one `h1`, `h2` per band, `h3` per feature row.
 - No motion. Nothing on this page needs it.
