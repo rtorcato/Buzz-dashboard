@@ -20,7 +20,14 @@ const THEMES = ["light", "dark"];
 // but sample mode skips every relay, GitHub and R2 read.
 const server = spawn(
   process.execPath,
-  ["node_modules/next/dist/bin/next", "dev", "--port", String(PORT)],
+  [
+    "node_modules/next/dist/bin/next",
+    "dev",
+    "--port",
+    String(PORT),
+    "--hostname",
+    "127.0.0.1",
+  ],
   {
     cwd: new URL("..", import.meta.url),
     env: {
