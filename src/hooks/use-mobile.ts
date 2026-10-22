@@ -1,3 +1,4 @@
+import { onMediaQueryChange } from "@rtorcato/browser-common/mediaquery";
 import * as React from "react";
 
 const MOBILE_BREAKPOINT = 768;
@@ -8,13 +9,15 @@ export function useIsMobile() {
   );
 
   React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
     const onChange = () => {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
     };
-    mql.addEventListener("change", onChange);
+    const off = onMediaQueryChange(
+      `(max-width: ${MOBILE_BREAKPOINT - 1}px)`,
+      onChange,
+    );
     setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
-    return () => mql.removeEventListener("change", onChange);
+    return off;
   }, []);
 
   return !!isMobile;
