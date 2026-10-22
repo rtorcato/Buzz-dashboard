@@ -21,6 +21,7 @@ import {
   takeFiles,
   thumbUrl,
 } from "@/lib/media";
+import { SAMPLE_MEDIA_ENV, sampleMedia, sampleMode } from "@/lib/sample-data";
 
 export const metadata: Metadata = { title: "Media · Hive" };
 
@@ -74,8 +75,8 @@ export default async function MediaPage({ searchParams }: PageProps<"/media">) {
   let env: MediaEnv;
   let files: MediaFile[];
   try {
-    env = readMediaEnv();
-    files = await listMedia(env);
+    env = sampleMode() ? SAMPLE_MEDIA_ENV : readMediaEnv();
+    files = sampleMode() ? sampleMedia() : await listMedia(env);
   } catch (err) {
     console.error("Media:", err);
     return (
@@ -133,11 +134,12 @@ export default async function MediaPage({ searchParams }: PageProps<"/media">) {
 
       {files.length === 0 ? (
         <EmptyState icon={Images} title="No media yet">
-          Agents upload with{" "}
+          Files in the bucket are grouped by key, laid out as{" "}
           <span className="font-mono text-[13px]">
-            media_put.sh &lt;repo&gt; &lt;file&gt;
+            &lt;repo&gt;/YYYY-MM-DD/&lt;file&gt;
           </span>
-          . New files show up here within a minute.
+          . Anything else is listed under other. New files show up here within a
+          minute.
         </EmptyState>
       ) : sections.length === 0 ? (
         <EmptyState icon={Images} title={`Nothing in ${repo}`}>

@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 !.env.example
+
+# Claude Code (repo-ai)
+.claude/settings.local.json
+.claude/ai-loop-status
+.claude/worktrees

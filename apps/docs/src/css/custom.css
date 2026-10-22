@@ -6,11 +6,19 @@
 :root {
 	--ifm-color-primary: #a35d00;
 	--jt-accent: #a35d00;
+	/* AA for small text on white and --jt-bg2. Same greys as shared-docs#170: drop this once that release ships. */
+	--jt-faint: #5f6b7a;
 }
 
 [data-theme="dark"] {
 	--ifm-color-primary: #e19b34;
 	--jt-accent: #e19b34;
+	--jt-faint: #768397;
+}
+
+/* Infima's .button.button--secondary (0,2,0) outranks the shared .button--secondary (0,1,0), so the label stayed dark on dark. */
+.button.button--secondary {
+	color: var(--jt-heading);
 }
 
 /* Mobile drawer: one flat menu (see src/theme/Navbar/MobileSidebar). */

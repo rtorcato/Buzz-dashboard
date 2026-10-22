@@ -7,6 +7,7 @@ import { cache } from "react";
 import { z } from "zod";
 import { readServerEnv, type ServerEnv } from "./env";
 import { type Filter, type NostrEvent, queryRelay } from "./relay";
+import { sampleActivity, sampleHive, sampleMode } from "./sample-data";
 
 export type Agent = {
   name: string;
@@ -337,6 +338,7 @@ export async function getActivity(
   pubkeys: string[],
   now = new Date(),
 ): Promise<number[]> {
+  if (sampleMode()) return sampleActivity();
   const days = dayStarts(now, ACTIVITY_DAYS);
   const events = await queryAll(readServerEnv(), {
     kinds: [9],
@@ -354,6 +356,9 @@ export type HiveResult =
 // list) and the views that render it.
 export const loadHive = cache(async (): Promise<HiveResult> => {
   await connection();
+  if (sampleMode()) {
+    return { hive: sampleHive(), fetchedAt: new Date().toISOString() };
+  }
   try {
     const hive = await getHive();
     return { hive, fetchedAt: new Date().toISOString() };

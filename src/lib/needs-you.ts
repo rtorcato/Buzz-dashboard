@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { type GitHub, loadGitHub } from "./github";
 import { loadHive } from "./hive";
+import { sampleMergeRow, sampleMode } from "./sample-data";
 import { loadStatusFeed, type StatusFeed } from "./status-feed";
 import { trippedDetail, usageState } from "./usage";
 
@@ -144,6 +145,17 @@ export function countsByView(
 export async function getNeedsYou(): Promise<NeedsYou> {
   // Render per request so the data is never baked in at build time.
   await connection();
+  if (sampleMode()) {
+    const { feed } = await loadStatusFeed();
+    const paused = pausedRow(feed, Date.now() / 1000);
+    return {
+      connected: false,
+      rows: [...(paused ? [paused] : []), sampleMergeRow()],
+      headsUp: [],
+      failures: [],
+      updatedAt: new Date().toISOString(),
+    };
+  }
   const failures = configFailures(process.env);
   // Freshness counts only successful fetches.
   let updatedAt: string | null = null;

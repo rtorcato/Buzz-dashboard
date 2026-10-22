@@ -1,45 +1,414 @@
+/* Docs home: the real dashboard leads. Spec: DESIGN.md, "Docs site". */
+
 .hero {
-	padding: 5rem 1rem 3rem;
+	position: relative;
+	max-width: 1120px;
+	margin: 0 auto;
+	padding: 5rem 1.25rem 0;
 	text-align: center;
+	isolation: isolate;
+}
+
+/* Faint accent glow behind the hero. */
+.hero::before {
+	content: "";
+	position: absolute;
+	inset: 0 0 auto;
+	height: 640px;
+	background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--jt-accent) 14%, transparent), transparent 70%);
+	z-index: -1;
+	pointer-events: none;
+}
+
+[data-theme="dark"] .hero::before {
+	background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--jt-accent) 18%, transparent), transparent 70%);
+}
+
+.eyebrow {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.375rem 0.875rem;
+	margin-bottom: 1.5rem;
+	border: 1px solid var(--jt-border);
+	border-radius: 999px;
+	background: var(--jt-surface);
+	color: var(--jt-muted);
+	font-family: var(--ifm-font-family-monospace);
+	font-size: 13px;
+}
+
+.eyebrowDot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #22c55e;
 }
 
 .title {
+	margin: 0 0 1.25rem;
 	font-size: clamp(2.5rem, 6vw, 4rem);
-	margin-bottom: 0.5rem;
+	font-weight: 800;
+	line-height: 1.05;
+	letter-spacing: -0.035em;
+	color: var(--jt-heading);
 }
 
-.tagline {
+.accentWord {
+	color: var(--jt-accent);
+}
+
+.lede {
+	max-width: 40rem;
+	margin: 0 auto 2rem;
 	font-size: 1.25rem;
 	color: var(--jt-muted);
-	max-width: 40rem;
-	margin: 0 auto 1.5rem;
 }
 
-.install {
-	display: inline-block;
-	padding: 0.75rem 1.25rem;
-	margin-bottom: 1.5rem;
-	background: var(--jt-code-bg);
+.ctas {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.75rem;
+	margin-bottom: 3.5rem;
+}
+
+.browser {
+	position: relative;
+	margin: 0 auto;
 	border: 1px solid var(--jt-border);
-	border-radius: 12px;
+	border-bottom: 0;
+	border-radius: 14px 14px 0 0;
+	background: var(--jt-surface);
+	box-shadow: var(--jt-shadow);
+	overflow: hidden;
+	text-align: left;
+}
+
+/* A 120px fade into the page background, so the frame runs off the bottom. */
+.browser::after {
+	content: "";
+	position: absolute;
+	inset: auto 0 0;
+	height: 120px;
+	background: linear-gradient(to bottom, transparent, var(--jt-bg));
+	pointer-events: none;
+}
+
+.browserBar {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	height: 38px;
+	padding: 0 0.875rem;
+	border-bottom: 1px solid var(--jt-border);
+	background: var(--jt-surface2);
+}
+
+.browserDots {
+	display: inline-flex;
+	gap: 6px;
+}
+
+.browserDots span {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--jt-border2);
+}
+
+.browserUrl {
+	font-family: var(--ifm-font-family-monospace);
+	font-size: 12px;
+	color: var(--jt-faint);
+}
+
+/* Screenshot card: one wrapper per ThemedImage, so ThemedImage's display: initial can't beat the module class. */
+.shot {
+	border: 1px solid var(--jt-border);
+	border-radius: 14px;
+	background: var(--jt-surface);
+	box-shadow: var(--jt-shadow);
+	overflow: hidden;
+}
+
+.shot img {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.browser .shot {
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+}
+
+.band {
+	max-width: 1120px;
+	margin: 0 auto;
+	padding: 5rem 1.25rem 0;
+}
+
+.bandInner {
+	max-width: 100%;
+}
+
+.kicker {
+	margin: 0 0 0.5rem;
+	font-family: var(--ifm-font-family-monospace);
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--jt-accent);
+}
+
+.h2 {
+	margin: 0 0 0.75rem;
+	font-size: clamp(1.875rem, 3.5vw, 2.5rem);
+	font-weight: 800;
+	line-height: 1.15;
+	letter-spacing: -0.025em;
+	color: var(--jt-heading);
+}
+
+.sub {
+	max-width: 40rem;
+	margin-bottom: 3rem;
+	color: var(--jt-muted);
+}
+
+.h3 {
+	margin: 0 0 0.75rem;
+	font-size: 1.75rem;
+	font-weight: 800;
+	line-height: 1.2;
+	letter-spacing: -0.02em;
+	color: var(--jt-heading);
+}
+
+.h3Small {
+	margin: 0 0 0.5rem;
+	font-size: 1.125rem;
+	font-weight: 700;
+	color: var(--jt-heading);
+}
+
+.feature {
+	display: grid;
+	grid-template-columns: 5fr 7fr;
+	gap: 56px;
+	align-items: center;
+	margin-bottom: 72px;
+}
+
+.featureImageLeft {
+	grid-template-columns: 7fr 5fr;
+}
+
+.featureImageLeft .featureImage {
+	order: -1;
+}
+
+.featureKicker {
+	margin: 0 0 0.5rem;
+	font-family: var(--ifm-font-family-monospace);
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--jt-accent);
+}
+
+.featureCopy p:not(.featureKicker) {
+	color: var(--jt-muted);
+}
+
+.ticks {
+	display: grid;
+	gap: 0.75rem;
+	margin: 1.5rem 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.tick {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.75rem;
+	color: var(--jt-text);
+}
+
+.tickIcon,
+.pillarIcon {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	border-radius: 8px;
+	background: var(--jt-accent-soft);
+	color: var(--jt-accent);
+}
+
+.tickIcon {
+	width: 18px;
+	height: 18px;
+	margin-top: 2px;
+	border-radius: 5px;
+}
+
+.tickIcon svg {
+	width: 12px;
+	height: 12px;
+}
+
+.phoneBand {
+	margin-top: 1rem;
+	padding: 5rem 0;
+	border-top: 1px solid var(--jt-border);
+	border-bottom: 1px solid var(--jt-border);
+	background: var(--jt-bg2);
+}
+
+.phoneBand > .bandInner {
+	max-width: 1120px;
+	margin: 0 auto;
+	padding: 0 1.25rem;
+}
+
+.phoneGrid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 56px;
+	align-items: center;
+}
+
+.phones {
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	gap: 24px;
+}
+
+.phone {
+	width: 250px;
+	height: 470px;
+	padding: 10px;
+	border-radius: 40px;
+	background: #0a0e16;
+	box-shadow: var(--jt-shadow);
+	overflow: hidden;
+}
+
+.phone img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: top;
+	border-radius: 30px;
+}
+
+.phoneSecond {
+	margin-top: 48px;
 }
 
 .pillars {
 	display: grid;
 	gap: 1rem;
-	grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-	max-width: 64rem;
-	margin: 0 auto;
-	padding: 1rem 1rem 4rem;
+	grid-template-columns: repeat(3, 1fr);
 }
 
 .pillar {
 	padding: 1.25rem;
-	background: var(--jt-surface);
 	border: 1px solid var(--jt-border);
+	border-radius: 14px;
+	background: var(--jt-surface);
+}
+
+.pillarIcon {
+	width: 36px;
+	height: 36px;
+	margin-bottom: 0.875rem;
+	border-radius: 10px;
+}
+
+.pillar p {
+	margin: 0;
+	color: var(--jt-muted);
+}
+
+.code {
+	min-width: 0;
+}
+
+.next {
+	display: grid;
+	gap: 1rem;
+	grid-template-columns: repeat(3, 1fr);
+}
+
+.nextCard {
+	padding: 1.25rem;
+	border: 1px dashed var(--jt-border2);
 	border-radius: 14px;
 }
 
-.pillar:hover {
-	border-color: var(--jt-accent-border);
+.nextCard p {
+	margin: 0;
+	color: var(--jt-muted);
+}
+
+.planned {
+	display: inline-block;
+	margin-bottom: 0.75rem;
+	padding: 0.125rem 0.625rem;
+	border: 1px dashed var(--jt-border2);
+	border-radius: 999px;
+	font-family: var(--ifm-font-family-monospace);
+	font-size: 12px;
+	color: var(--jt-muted-strong);
+}
+
+@media (max-width: 995px) {
+	.feature,
+	.featureImageLeft {
+		grid-template-columns: 1fr;
+		gap: 2rem;
+	}
+
+	/* Stacked: image after copy whatever the desktop side. */
+	.featureImageLeft .featureImage {
+		order: 0;
+	}
+
+	.phoneGrid,
+	.pillars,
+	.next {
+		grid-template-columns: 1fr;
+	}
+
+	.phones {
+		margin-top: 2rem;
+	}
+}
+
+@media (max-width: 639px) {
+	.eyebrow {
+		font-size: 12px;
+	}
+
+	.browserBar {
+		display: none;
+	}
+
+	.browser {
+		border-radius: 14px 14px 0 0;
+	}
+
+	/* One phone only, dark, so the screenshot gets the width. */
+	.phoneSecond {
+		display: none;
+	}
 }
