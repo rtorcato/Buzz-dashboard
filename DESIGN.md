@@ -25,7 +25,7 @@ The app is read-only. Every action is an outbound link to GitHub or npm, marked 
   - **Paused** (the feed says `paused`): the chip gets a `warning` border and a 10% tint, and leads with `circle-pause` and "Paused · resets 9:00 PM". The fill that tripped turns `warning`.
   - **Feed stale** (the status feed is more than 10 minutes old): dashed border, meters at 60% opacity, `clock-alert` and "as of 38m ago" in `warning`.
   - **Not reported** (no status feed yet): dashed border, `gauge` and "Usage not reported", muted.
-  - **Tooltip:** a title, then 5-hour (% · pauses at X% · reset time), Weekly (% · budget % · pauses at Y%), where each "pauses at" comes from the feed and is left out when the feed has none, a muted line explaining the budget with the weekly reset, and "Reading 2m ago, from the Mac".
+  - **Tooltip:** a title, then 5-hour (% · pauses at X% · reset time), Weekly (% · budget % · pauses at Y%), where each "pauses at" comes from the feed and is left out when the feed has none, a muted line explaining the budget with the weekly reset, and "Reading 2m ago, from the status feed".
   - **Phone:** the chip shrinks to its icon plus "78% · 61%". Tapping it opens the same detail.
 - **Needs you** (`Card`): one row per item type, oldest first, each linking to its view.
   - A release waiting for approval: `warning`, rocket icon.
@@ -33,7 +33,7 @@ The app is read-only. Every action is an outbound link to GitHub or npm, marked 
   - `ai-blocked` issues: `destructive`, octagon-alert icon.
   - An agent stopped with open claims (#24): `destructive`, `power-off` icon. "Agent stopped with open claims", then the name, how long it has been stopped and the claim keys in mono. It links to Agents.
   - Paused for usage (#25): `warning`, `circle-pause` icon. It names the limit that tripped ("5h window at 92% (pauses at 90%)", without the parenthesis when the feed has no threshold) and the reset time with a countdown ("resets 9:00 PM, in 1h 20m"). It links to Agents, since usage has no view of its own. Amber, not red, because it clears by itself at reset.
-  - A muted "Heads-up" footer line that isn't counted: an agent has held a claim but been quiet for more than 2 hours, or the status feed is stale ("Runtime feed is 38m old (is the Mac asleep?)").
+  - A muted "Heads-up" footer line that isn't counted: an agent has held a claim but been quiet for more than 2 hours, or the status feed is stale ("Runtime feed is 38m old (is the runtime host asleep?)").
   - With zero items, the card collapses to one green "All clear" line (see States).
   - Open `merge-ready` PRs: neutral (`border-border bg-muted text-foreground`), `git-merge` icon. A merge-ready PR is waiting on a click, not a fault, and green would read as cleared. "2 PRs ready to merge", then the repo#number keys. It links to Pipeline. For most deployments they wait on the owner; one with a merge bot hides the row with `NEEDS_YOU_EXCLUDE_LABELS=merge-ready`.
 - **Needs you** stays above every view, at the top of the main column. Settings is the one page without it, because the sidebar counts already show.
@@ -71,7 +71,7 @@ Each Agents card gets a row between its header and "Working on", in a bordered `
 - **One status badge,** ranked Stopped > Quiet > Active > Idle.
   - **Stopped with open claims:** a destructive `Badge` (`power-off`, "Stopped") and a `ring-1 ring-destructive/40` on the card. "Working on" becomes **"Stalled"** (destructive) with "Holds 2 claims: …" on a 10% destructive tint. It adds a Needs-you row.
   - **Stopped with no claims** (a parked agent): a muted `Badge` and the card at 80% opacity. It sorts last and is not a problem.
-  - **Not reported** (no log on the Mac for this pubkey): the badge falls back to relay activity (Active, Idle, Quiet), as before.
+  - **Not reported** (no runtime in the status feed for this pubkey): the badge falls back to relay activity (Active, Idle, Quiet), as before.
 - **Feed stale:** cards keep their last values and add "· as of 38m ago" in `warning` to the runtime row.
 
 ## Agent page (#27)
@@ -79,7 +79,7 @@ Each Agents card gets a row between its header and "Working on", in a bordered `
 The route is `/agents/[name]`, where `name` is the lowercased display name with spaces as hyphens (`/agents/optimus-prime`). Renamed agents redirect from their old name (`/agents/fizz`). The shell (header, Needs you, sidebar) stays, with Agents active in the sidebar. It's still read-only, so every action is an outbound link.
 
 - **Breadcrumb** (shadcn `Breadcrumb`): "← Agents › Bumble". The back link is a `h-9` target.
-- **Stalled alert:** only when the agent is stopped with open claims. A destructive `Alert` with `power-off`: "Bumble stopped 3h 05m ago while holding 2 claims", then "Restart it from Buzz Desktop on the Mac, or ask Prime to reassign the claims. This page is read-only."
+- **Stalled alert:** only when the agent is stopped with open claims. A destructive `Alert` with `power-off`: "Bumble stopped 3h 05m ago while holding 2 claims", then "Restart it from Buzz Desktop, or ask Prime to reassign the claims. This page is read-only."
 - **Hero** (`Card`, with the stalled ring when it applies):
   - On the left, the `Avatar` at **176px** (`size-44`, `ring-1 ring-border`, `object-cover`). It shows the profile picture, with initials at `text-5xl` as the fallback.
   - On the right, stacked:
@@ -97,7 +97,7 @@ The route is `/agents/[name]`, where `name` is the lowercased display name with 
   - **Activity:** a `BarChart` of messages per day, chart-3 with today in chart-1, plus a `ToggleGroup` for 7d, 14d or 30d.
   - **Messages:** the agent's messages, newest first, grouped by day under sticky labels. Each row has the time, a mono `#channel` chip, the text and an external link to the message. A `Select` filters by channel.
 - **Right column:**
-  - **Runtime:** a `dl` of State, Stopped at / Since, Last turn, Started and Model (mono), with a footer reading "From the status feed · as of 2m ago". When the agent isn't reported, it shows `circle-help` and "Not reported. This agent has no log on the Mac." with no red.
+  - **Runtime:** a `dl` of State, Stopped at / Since, Last turn, Started and Model (mono), with a footer reading "From the status feed · as of 2m ago". When the agent isn't reported, it shows `circle-help` and "Not reported. The status feed has no runtime for this agent." with no red.
   - **Recent PRs:** the last 5 PRs whose body names `@Name` (the same attribution as Pipeline). Each row has a state pill (`open` info, `merged` success, `closed` muted), the title, the key in mono, the age and an external link, with an outline "All on GitHub" in the header.
   - **Where they talk:** messages per channel over the last 7 days, the top 5, as thin chart-3 bars with counts.
   - **Identity:** the npub truncated in mono with a copy `Button` (`size-9`), "Also seen as N older identities · formerly X", and the home channel.
@@ -108,7 +108,7 @@ The route is `/agents/[name]`, where `name` is the lowercased display name with 
 
 ## Status feed (#26)
 
-The runtime and usage data come from one JSON file, object key `hive/status.json` in the media bucket, that a script on the operator's Mac publishes every 5 minutes. The dashboard reads it on the server only, and it never contains secrets, env values or log contents.
+The runtime and usage data come from one JSON file, object key `hive/status.json` in the media bucket, that a script on the operator's machine publishes every 5 minutes. The dashboard reads it on the server only, and it never contains secrets, env values or log contents.
 
 ```json
 {
@@ -137,7 +137,7 @@ The runtime and usage data come from one JSON file, object key `hive/status.json
 
 > **Status:** approved by rtorcato on 2026-10-09. UI PRs can build against it.
 
-A gallery of every file the agents upload to the public R2 media bucket, served at `<media-host>`. The app reads the base URL from the `MEDIA_BASE_URL` env var (e.g. `https://media.torcato.dev`) and never hardcodes a domain. Keys are `<repo>/<YYYY-MM-DD>/<file>`, written only by `~/.buzz/bin/media_put.sh`.
+A gallery of every file the agents upload to the public R2 media bucket, served at `<media-host>`. The app reads the base URL from the `MEDIA_BASE_URL` env var (e.g. `https://media.torcato.dev`) and never hardcodes a domain. Keys are `<repo>/<YYYY-MM-DD>/<file>`, written by your upload tool.
 
 - **Header row:** "Media", then "`70` files in `<media-host>` · newest first" (the host part of `MEDIA_BASE_URL`). On the right, a repo `Select` ("All repos" or one repo, also set by `?repo=`) and an outline "Bucket" link to the bucket in the Cloudflare dashboard (`external-link`).
 - **Grouping:** by repo, then by date, newest first. Repos are ordered by their newest upload. Each repo header has a `folder` icon, the repo name in mono, a muted file-count pill and a "View all" link that sets the repo filter. Each date label reads "Wed Oct 7 · 6" (muted, `text-xs`).
@@ -145,7 +145,7 @@ A gallery of every file the agents upload to the public R2 media bucket, served 
 - **Grid:** 2 columns on phones, 3 at `sm`, 4 at `lg`, 5 at `xl`. Gap 12px on phones, 16px above.
 - **Tile** (a `Card`): a 4:3 thumbnail on `bg-muted`, `object-cover object-top` (screenshots read from the top), then a footer row with the filename (Geist Mono 13px, truncated, full key in `title`), the time and size (`text-xs`, muted), and a ghost icon `Button` (`size-9`, `link` icon, `aria-label="Copy link to <file>"`). The copy button is always visible, never hover-only.
   - **Thumbnail URL:** `${MEDIA_BASE_URL}/cdn-cgi/image/width=480,format=auto/<key>` for png, jpg, webp and gif. SVGs load the original. Use `loading="lazy"` and `decoding="async"`.
-  - **Not an image** (html, pdf, …): the thumbnail area shows a `file-code` icon (or `file`) and the extension. Clicking it **downloads** the file and never renders it, and the footer icon is `download` instead of `link`. The bucket is public, so an `.html` file rendered from the media host would run as a live page on that domain. `media_put.sh` therefore uploads every non-image file with `Content-Disposition: attachment`, and the tile link also carries the `download` attribute.
+  - **Not an image** (html, pdf, …): the thumbnail area shows a `file-code` icon (or `file`) and the extension. Clicking it **downloads** the file and never renders it, and the footer icon is `download` instead of `link`. The bucket is public, so an `.html` file rendered from the media host would run as a live page on that domain. Any uploader must therefore send every non-image file with `Content-Disposition: attachment`, and the tile link also carries the `download` attribute.
   - **Thumbnail fails to load:** keep the tile's size and show `image-off` with "No preview" (see States).
 - **Copy:** `navigator.clipboard.writeText(url)`. The button turns into a success check plus "Copied" (icon only on phones) for 2s, announced through `role="status"`.
 - **Viewer** (shadcn `Dialog`): opens when a thumbnail is clicked. On desktop it's inset 24px with a max width of 6xl. On phones it fills the screen.
