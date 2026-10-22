@@ -21,6 +21,7 @@ import {
   takeFiles,
   thumbUrl,
 } from "@/lib/media";
+import { SAMPLE_MEDIA_ENV, sampleMedia, sampleMode } from "@/lib/sample-data";
 
 export const metadata: Metadata = { title: "Media · Hive" };
 
@@ -74,8 +75,8 @@ export default async function MediaPage({ searchParams }: PageProps<"/media">) {
   let env: MediaEnv;
   let files: MediaFile[];
   try {
-    env = readMediaEnv();
-    files = await listMedia(env);
+    env = sampleMode() ? SAMPLE_MEDIA_ENV : readMediaEnv();
+    files = sampleMode() ? sampleMedia() : await listMedia(env);
   } catch (err) {
     console.error("Media:", err);
     return (

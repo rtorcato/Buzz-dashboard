@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { cache } from "react";
 
 import { type MediaEnv, r2Client, r2Url, readMediaEnv } from "./media";
+import { sampleFeed, sampleMode } from "./sample-data";
 
 // The status feed (DESIGN.md → "Status feed"): `hive/status.json` in the media
 // bucket, written every 5 minutes by a script on the operator's Mac. Read with
@@ -110,6 +111,7 @@ let last: StatusFeed | null = null;
 /** Missing file or R2 env → not reported; failed fetch → stale. */
 export const loadStatusFeed = cache(async (): Promise<FeedResult> => {
   await connection();
+  if (sampleMode()) return { feed: sampleFeed(), stale: false };
   let env: MediaEnv;
   try {
     env = readMediaEnv();

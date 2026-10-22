@@ -336,6 +336,22 @@ pnpm build       # next build (standalone output)
 
 CI runs all four on every pull request and push to `main`.
 
+### Docs screenshots
+
+The docs site's screenshots in `apps/docs/static/img/screens/` come from the
+real views running on made-up sample data (`src/lib/sample-data.ts`).
+Regenerate the whole set after a UI change with:
+
+```sh
+pnpm exec playwright install chromium   # once
+pnpm screens
+```
+
+It starts `next dev` with `BUZZ_SAMPLE_DATA=1` on port 3123 (`SCREENS_PORT`
+to change it), captures each view in light and dark, writes WebP, and stops
+the server. Sample data never loads in a production build, so setting the
+variable on a deployed image does nothing.
+
 To build and run your own image from a clone, `docker compose up -d --build`
 uses the repository's [`compose.yaml`](compose.yaml).
 `./scripts/docker-dev.sh` wraps the same flow, and `./scripts/docker-dev.sh
