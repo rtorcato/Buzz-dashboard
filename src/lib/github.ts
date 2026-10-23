@@ -21,6 +21,16 @@ export const CLAIM_LABELS = [
 ] as const;
 export const PR_WINDOW_DAYS = 30;
 
+/** A submitted PR review, for the Pipeline flow's steps (#47). */
+export type Review = {
+  /** "APPROVED", "CHANGES_REQUESTED", "COMMENTED" or "DISMISSED". */
+  state: string;
+  /** Unix seconds. */
+  at: number;
+  /** GitHub login of the reviewer. */
+  author: string;
+};
+
 export type GitHubItem = {
   /** "owner/name", exactly as GitHub returns it. */
   repo: string;
@@ -37,6 +47,8 @@ export type GitHubItem = {
   createdAt: number;
   closedAt: number | null;
   mergedAt: number | null;
+  /** PRs only, oldest first; [] for issues. */
+  reviews: Review[];
 };
 
 export type Claim = GitHubItem & {
@@ -86,6 +98,14 @@ type RawItem = {
   author: { login: string } | null;
   repository: { nameWithOwner: string };
   labels: { nodes: { name: string }[] } | null;
+  /** PRs only: submitted reviews, oldest first. */
+  reviews?: {
+    nodes: ({
+      state: string;
+      submittedAt: string | null;
+      author: { login: string } | null;
+    } | null)[];
+  };
   /** Claims only: an issue's newest comments, oldest first. */
   comments?: { nodes: RawComment[] };
 };
@@ -110,6 +130,18 @@ export function toItem(raw: RawItem): GitHubItem {
     createdAt: secs(raw.createdAt),
     closedAt: secsOrNull(raw.closedAt),
     mergedAt: secsOrNull(raw.mergedAt),
+    // A pending review has no submittedAt yet.
+    reviews: (raw.reviews?.nodes ?? []).flatMap((r) =>
+      r?.submittedAt
+        ? [
+            {
+              state: r.state,
+              at: secs(r.submittedAt),
+              author: r.author?.login ?? "ghost",
+            },
+          ]
+        : [],
+    ),
   };
 }
 
@@ -168,7 +200,8 @@ const FIELDS = `number title url body createdAt closedAt
   author { login } repository { nameWithOwner } labels(first: 20) { nodes { name } }`;
 const NODES = `__typename
   ... on Issue { ${FIELDS} }
-  ... on PullRequest { ${FIELDS} mergedAt }`;
+  ... on PullRequest { ${FIELDS} mergedAt
+    reviews(first: 20) { nodes { state submittedAt author { login } } } }`;
 
 const CLAIM_NODES = `${NODES}
   ... on Issue { comments(last: 30) { nodes { body createdAt author { login } } } }`;
@@ -286,9 +319,9 @@ function refresh(token: string): Promise<Fetched> {
 // A full read is 8 sequential requests and takes about 20s, so requests get
 // the last good read at once and a refresh runs behind them once it is 2
 // minutes old. Only the first request after a start (or after 5 minutes of
-// failures) waits.
-export const loadGitHub = cache(async (): Promise<GitHubResult> => {
-  await connection();
+// failures) waits. The history ingester calls this outside a request, so it
+// shares the read instead of making its own.
+export async function readGitHub(): Promise<GitHubResult> {
   // Read directly: readServerEnv() also demands the relay vars, and a relay
   // misconfiguration shouldn't take GitHub down with it.
   const token = process.env.GITHUB_TOKEN;
@@ -306,4 +339,9 @@ export const loadGitHub = cache(async (): Promise<GitHubResult> => {
       error: err instanceof Error ? err.message : "error",
     };
   }
+}
+
+export const loadGitHub = cache(async (): Promise<GitHubResult> => {
+  await connection();
+  return readGitHub();
 });

@@ -1,16 +1,30 @@
 import { connection } from "next/server";
 import { type GitHub, loadGitHub } from "./github";
+import type { FailingAgent, HealthSource } from "./health";
+import { loadFailing } from "./health-data";
 import { loadHive } from "./hive";
 import { sampleMergeRow, sampleMode } from "./sample-data";
 import { loadStatusFeed, type StatusFeed } from "./status-feed";
 import { trippedDetail, usageState } from "./usage";
 
-export const VIEWS = ["agents", "pipeline", "releases", "timeline"] as const;
+export const VIEWS = [
+  "agents",
+  "health",
+  "pipeline",
+  "releases",
+  "timeline",
+] as const;
 export type View = (typeof VIEWS)[number];
 
 // The things that need the owner. A deployment whose merge bot handles
 // merge-ready hides that row with NEEDS_YOU_EXCLUDE_LABELS=merge-ready.
-export type NeedsYouKind = "release" | "ci" | "blocked" | "merge" | "paused";
+export type NeedsYouKind =
+  | "release"
+  | "ci"
+  | "blocked"
+  | "merge"
+  | "paused"
+  | "failing";
 
 export const KIND_VIEW: Record<NeedsYouKind, View> = {
   release: "releases",
@@ -19,9 +33,11 @@ export const KIND_VIEW: Record<NeedsYouKind, View> = {
   merge: "pipeline",
   // Usage has no tab of its own.
   paused: "agents",
+  failing: "health",
 };
 
-// One row per item type, e.g. "2 releases waiting for your approval".
+// One row per item type, e.g. "2 releases waiting for your approval", except
+// "failing", which has one row per failing agent.
 export type NeedsYouRow = {
   kind: NeedsYouKind;
   title: string;
@@ -32,7 +48,15 @@ export type NeedsYouRow = {
   since: string;
   // Unix seconds the item clears by itself (a usage pause), shown as a countdown.
   resetsAt?: number | null;
+  // The alert items (#45) the row covers, so snooze and ack (#46) can mute
+  // them. Absent on rows no alert rule reads.
+  keys?: string[];
 };
+
+// Alert item keys, shared by the rows and the alerts pass.
+export const failingKey = (agent: string) => `failing:${agent}`;
+export const mergeKey = (pr: { repo: string; number: number }) =>
+  `merge:${pr.repo}#${pr.number}`;
 
 // A source the dashboard can't read, shown as a destructive Alert.
 export type SourceFailure = { source: string; detail: string };
@@ -124,6 +148,27 @@ export function mergeRow(github: GitHub) {
     detail: prs.map((p) => `${p.repo.split("/")[1]}#${p.number}`).join(", "),
     count: prs.length,
     since: new Date(oldest * 1000).toISOString(),
+    keys: prs.map(mergeKey),
+  } satisfies NeedsYouRow;
+}
+
+/** The "Agent failing turns" row for one agent (DESIGN.md → Shell). */
+export function failingRow(f: FailingAgent, source: HealthSource) {
+  const { attempts, errors } = f.hour;
+  return {
+    kind: "failing",
+    // With OTel the rate is per API request, never per turn.
+    title:
+      source === "signer"
+        ? `${f.agent} is failing turns`
+        : `${f.agent} is failing API requests`,
+    detail:
+      source === "signer"
+        ? `${errors} of ${attempts} turns ended in error in the last hour`
+        : `${errors} of ${attempts} API requests failed in the last hour`,
+    count: 1,
+    since: new Date(f.since * 1000).toISOString(),
+    keys: [failingKey(f.agent)],
   } satisfies NeedsYouRow;
 }
 
@@ -188,7 +233,16 @@ export async function getNeedsYou(): Promise<NeedsYou> {
       });
     }
   }
-  // ponytail: only the usage pause and merge-ready are read so far. The
+  try {
+    const health = await loadFailing(Math.floor(Date.now() / 1000));
+    if (health)
+      rows.push(...health.failing.map((f) => failingRow(f, health.source)));
+  } catch (err) {
+    // Like the cost chip: a database outage shows on Health, not every page.
+    console.error("Needs you, Health:", err);
+  }
+  // ponytail: only the usage pause, merge-ready and failing agents are read
+  // so far. The
   // Pipeline PR adds ai-blocked issues and the Releases PR adds release
   // approvals and red CI on main. Until then the card stays disconnected
   // rather than a stubbed "All clear", but still lists the rows it can see.

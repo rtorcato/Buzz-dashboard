@@ -325,12 +325,9 @@ export function SettingsForm({
 
   return (
     <div className="max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">
-          Preferences for this browser. Changes apply right away.
-        </p>
-      </div>
+      <p className="text-muted-foreground">
+        Preferences for this browser. Changes apply right away.
+      </p>
       <div className="flex items-start gap-3 rounded-lg border p-3 text-sm text-muted-foreground">
         <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
         <p>

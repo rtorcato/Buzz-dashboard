@@ -1,0 +1,1 @@
+ALTER TABLE "cost_points" ADD COLUMN "channel" text;

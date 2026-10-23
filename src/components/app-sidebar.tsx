@@ -3,8 +3,10 @@
 import {
   Activity,
   Bot,
+  Coins,
   Eye,
   GitPullRequest,
+  HeartPulse,
   Images,
   type LucideIcon,
   Rocket,
@@ -12,6 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SignInBlock, type SignInState } from "@/components/sign-in";
 import {
   Sidebar,
   SidebarContent,
@@ -29,22 +32,37 @@ import {
 } from "@/components/ui/sidebar";
 import type { View } from "@/lib/needs-you";
 
-// Media never needs the owner, so it has no count.
-type Item = View | "media";
+// Media and Cost never need the owner, so they have no count.
+type Item = View | "media" | "cost";
 
-const VIEWS: { view: Item; label: string; icon: LucideIcon }[] = [
+// `history: true` marks a view that reads the history store (#39), like
+// Health and Cost; it leaves the sidebar when DATABASE_URL is unset.
+const VIEWS: {
+  view: Item;
+  label: string;
+  icon: LucideIcon;
+  history?: true;
+}[] = [
   { view: "agents", label: "Agents", icon: Bot },
+  { view: "health", label: "Health", icon: HeartPulse, history: true },
   { view: "pipeline", label: "Pipeline", icon: GitPullRequest },
   { view: "releases", label: "Releases", icon: Rocket },
   { view: "timeline", label: "Timeline", icon: Activity },
+  { view: "cost", label: "Cost", icon: Coins, history: true },
   { view: "media", label: "Media", icon: Images },
 ];
 
 // DESIGN.md → Sidebar. The route is the selected item.
 export function AppSidebar({
   counts,
+  history,
+  signIn,
 }: {
   counts: Partial<Record<Item, number>>;
+  /** True when the history store is configured. */
+  history: boolean;
+  /** Null when owner sign-in is off (#40). */
+  signIn: SignInState | null;
 }) {
   const active = usePathname().split("/")[1];
   const { setOpenMobile } = useSidebar();
@@ -99,47 +117,50 @@ export function AppSidebar({
           <SidebarGroupLabel>Views</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {VIEWS.map(({ view, label, icon: Icon }) => {
-                const count = counts[view] ?? 0;
-                return (
-                  <SidebarMenuItem key={view}>
-                    <SidebarMenuButton
-                      isActive={view === active}
-                      className="max-md:h-11"
-                      tooltip={count ? `${label} · ${count} need you` : label}
-                      render={
-                        <Link
-                          href={`/${view}`}
-                          onClick={close}
-                          aria-current={view === active ? "page" : undefined}
-                        />
-                      }
-                    >
-                      <Icon aria-hidden />
-                      <span>{label}</span>
+              {VIEWS.filter((v) => history || !v.history).map(
+                ({ view, label, icon: Icon }) => {
+                  const count = counts[view] ?? 0;
+                  return (
+                    <SidebarMenuItem key={view}>
+                      <SidebarMenuButton
+                        isActive={view === active}
+                        className="max-md:h-11"
+                        tooltip={count ? `${label} · ${count} need you` : label}
+                        render={
+                          <Link
+                            href={`/${view}`}
+                            onClick={close}
+                            aria-current={view === active ? "page" : undefined}
+                          />
+                        }
+                      >
+                        <Icon aria-hidden />
+                        <span>{label}</span>
+                        {count > 0 && (
+                          // On the icon rail the pill becomes a dot on the icon.
+                          <span
+                            className="absolute top-1.5 left-6 hidden size-1.5 rounded-full bg-destructive group-data-[collapsible=icon]:block"
+                            aria-hidden
+                          />
+                        )}
+                      </SidebarMenuButton>
                       {count > 0 && (
-                        // On the icon rail the pill becomes a dot on the icon.
-                        <span
-                          className="absolute top-1.5 left-6 hidden size-1.5 rounded-full bg-destructive group-data-[collapsible=icon]:block"
-                          aria-hidden
-                        />
+                        <SidebarMenuBadge className="bg-destructive/15 text-red-700 dark:text-destructive">
+                          {count}
+                          <span className="sr-only"> need you</span>
+                        </SidebarMenuBadge>
                       )}
-                    </SidebarMenuButton>
-                    {count > 0 && (
-                      <SidebarMenuBadge className="bg-destructive/15 text-red-700 dark:text-destructive">
-                        {count}
-                        <span className="sr-only"> need you</span>
-                      </SidebarMenuBadge>
-                    )}
-                  </SidebarMenuItem>
-                );
-              })}
+                    </SidebarMenuItem>
+                  );
+                },
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter>
+        {signIn && <SignInBlock state={signIn} />}
         <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground group-data-[collapsible=icon]:justify-center">
           <Eye className="size-4 shrink-0" aria-hidden />
           <span className="group-data-[collapsible=icon]:sr-only">

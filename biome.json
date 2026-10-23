@@ -9,6 +9,7 @@
       "!apps/docs",
       "!src/app/shadcn-tailwind.css",
       "!**/.claude/worktrees",
+      "!drizzle",
       "!**/*.md",
       "!**/*.yaml",
       "!**/*.yml"

@@ -6,7 +6,12 @@ import { connection } from "next/server";
 import { cache } from "react";
 import { z } from "zod";
 import { readServerEnv, type ServerEnv } from "./env";
-import { type Filter, type NostrEvent, queryRelay } from "./relay";
+import {
+  type AuthSigner,
+  type Filter,
+  type NostrEvent,
+  queryRelay,
+} from "./relay";
 import { sampleActivity, sampleHive, sampleMode } from "./sample-data";
 
 export type Agent = {
@@ -52,6 +57,8 @@ export type Hive = {
   feed: FeedItem[];
   /** Messages per local hour today, 24 entries. */
   hourly: number[];
+  /** Channel name by id (the `h` tag), for history rows that store the id. */
+  channels: Record<string, string>;
 };
 
 // Renamed agents, from AGENT_ALIASES: a JSON object of former → current
@@ -289,7 +296,7 @@ export function buildHive(
     };
   });
 
-  return { agents, feed, hourly };
+  return { agents, feed, hourly, channels: Object.fromEntries(channels) };
 }
 
 // The relay returns at most 1000 events per filter, newest first, whatever the
@@ -299,11 +306,21 @@ const RELAY_CAP = 1000;
 const MAX_PAGES = 10;
 
 /** Every event matching one filter, paging back with `until` past the cap. */
-async function queryAll(env: ServerEnv, filter: Filter): Promise<NostrEvent[]> {
+export async function queryAll(
+  env: ServerEnv,
+  filter: Filter,
+  timeoutMs?: number,
+  sign?: AuthSigner,
+): Promise<NostrEvent[]> {
   const seen = new Map<string, NostrEvent>();
   let until: number | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
-    const batch = await queryRelay(env, [{ ...filter, until }]);
+    const batch = await queryRelay(
+      env,
+      [{ ...filter, until }],
+      timeoutMs,
+      sign,
+    );
     for (const e of batch) seen.set(e.id, e);
     if (batch.length < RELAY_CAP) break;
     // `until` is inclusive, so the oldest second is fetched again and deduped.

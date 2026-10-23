@@ -11,19 +11,26 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { loadMutes } from "@/lib/alert-store";
+import { authMode, getOwner } from "@/lib/auth";
+import { costConnected } from "@/lib/cost-source";
+import { costSince, historyEnabled } from "@/lib/history";
 import { countsByView, getNeedsYou } from "@/lib/needs-you";
-import { loadStatusFeed } from "@/lib/status-feed";
+import { npubEncode } from "@/lib/npub";
 
 export default async function ViewsLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const [needsYou, { feed, stale }, jar] = await Promise.all([
+  const [needsYou, costToday, jar, owner, mutes] = await Promise.all([
     getNeedsYou(),
-    loadStatusFeed(),
+    readCostToday(),
     cookies(),
+    getOwner(),
+    readMutes(),
   ]);
+  const mode = authMode();
   const now = Date.now();
   const counts = countsByView(needsYou.rows);
 
@@ -33,23 +40,41 @@ export default async function ViewsLayout({
       <SidebarProvider
         defaultOpen={jar.get("sidebar_state")?.value !== "false"}
       >
-        <AppSidebar counts={counts} />
+        <AppSidebar
+          counts={counts}
+          history={historyEnabled()}
+          signIn={
+            mode && {
+              mode,
+              owner:
+                owner?.via === "nostr"
+                  ? { via: "nostr", npub: npubEncode(owner.pubkey) }
+                  : owner,
+            }
+          }
+        />
         <SidebarInset className="min-w-0">
           <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
             <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-4 sm:px-6">
               <SidebarTrigger className="-ml-2 size-9 md:size-8" />
               <HeaderActions
                 updatedAt={needsYou.updatedAt}
-                feed={{
-                  usage: feed?.usage ?? null,
-                  publishedAt: feed?.publishedAt ?? null,
-                  stale,
-                }}
+                costToday={costToday}
               />
             </div>
           </header>
           <main className="mx-auto w-full max-w-[1400px] flex-1 space-y-6 px-4 py-6 sm:px-6">
-            <NeedsYouCard data={needsYou} now={now} />
+            <NeedsYouCard
+              data={needsYou}
+              now={now}
+              snooze={
+                mutes && {
+                  mutes,
+                  canEdit: owner !== null,
+                  signIn: mode !== null,
+                }
+              }
+            />
             {needsYou.failures.map((f) => (
               <SourceDown key={f.source} source={f.source}>
                 {f.detail}
@@ -62,4 +87,29 @@ export default async function ViewsLayout({
       </SidebarProvider>
     </TooltipProvider>
   );
+}
+
+// The cost chip's amount (#42): null, so no chip, without a cost source.
+async function readCostToday(): Promise<number | null> {
+  if (!(await costConnected())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  try {
+    return await costSince(today);
+  } catch (err) {
+    console.error("Cost chip:", err);
+    return null;
+  }
+}
+
+// Snoozed and acked Needs you items (#46): null, so no snooze, without the
+// history store or while it's down.
+async function readMutes() {
+  if (!historyEnabled()) return null;
+  try {
+    return await loadMutes();
+  } catch (err) {
+    console.error("Needs you, snooze:", err);
+    return null;
+  }
 }

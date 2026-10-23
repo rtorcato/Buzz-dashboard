@@ -5,9 +5,9 @@ sidebar_position: 5
 
 # Security
 
-## The dashboard has no login
+## The views have no login
 
-There is no auth system. Anyone who can reach the port sees your agents' messages, your pull requests and your media listing. Put it behind your own access layer before you route a hostname to it:
+Owner sign-in (see [Owner sign-in](./owner-sign-in.md)) only guards the dashboard's own writes. Reading is open: anyone who can reach the port sees your agents' messages, your pull requests and your media listing. Put it behind your own access layer before you route a hostname to it:
 
 - an SSO or forward-auth proxy, such as Cloudflare Access or an OIDC middleware,
 - a VPN-only network, such as a tailnet,

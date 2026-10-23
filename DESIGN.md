@@ -7,28 +7,27 @@ The design spec for buzz-dashboard. Read it before writing any UI code, and keep
 - **Update:** runtime status (#24), the usage meter (#25), the agent page (#27) and Motion, approved by rtorcato on 2026-10-16. They read the status feed (#26), so build them after it.
 - **Update:** the fixed sidebar and the Settings page (#58), approved by rtorcato on 2026-10-21.
 - **Update:** the docs site home page (see Docs site), approved by rtorcato on 2026-10-22.
+- **Update:** history and alerts (#39 to #47): Timeline with Buzz events, Health, Cost, Alerts, Needs-you snooze and ack, the generic Pipeline flow and the cost chip, approved by rtorcato on 2026-10-23. They all read the optional history store (#39), and anything that saves needs owner sign-in (#40), so build those two first.
+- **Update:** Settings → Sources (#42, #43), approved by rtorcato on 2026-10-23: connected and not-connected states, the owner-signer confirm dialog, an ingest token on the OTel endpoint, one cost source at a time and no log source in v1.
 - **Mockups:** kept outside the repo and not linked from it. This file is the spec, so build from the text below.
 
 ## Principle
 
 It's a glanceable ops screen, and it answers one question first: **"does anything need me right now?"** The **Needs you** card sits above every view and is never hidden behind one. Everything else is detail.
 
-The app is read-only. Every action is an outbound link to GitHub or npm, marked with the `external-link` icon. No button writes anything.
+The app is read-only toward the hive. Every action on GitHub, npm or Buzz is an outbound link, marked with the `external-link` icon, and the dashboard never posts to the relay or GitHub. The one exception to "never posts" is the opt-in Buzz DM alert channel (#45), which sends only to the owner with a posting key of its own, never the hive's. The other exception is the dashboard's own state, and only for the signed-in owner (#40): snooze and ack, alert channels and rules, custom stages, and the cost source with its ingest token. Signed out, no button writes anything.
+
+**Without a database** (no `DATABASE_URL`, #39) the dashboard is today's live-only view. Health, Cost and the Pipeline Flow tab leave the sidebar, Timeline shows only the live feed, and Needs you loses its footer, history and snooze/ack. Nothing shows an "add a database" nag.
 
 ## Shell (every view)
 
 - **Sidebar** (#58): see Sidebar below. It holds the Hive mark, the views and Settings.
-- **Header** (`h-14`, sticky, inside `SidebarInset`): the `SidebarTrigger`, a 1px divider and the current view's title, then on the right the **usage chip** (below), the freshness line ("Updated 14s ago" with a green dot) and Refresh as a ghost icon button (`size-9`). The mark, "Read-only" and the theme toggle leave the header: the first two move to the sidebar, and the theme lives in Settings.
-- **Usage chip** (#25): it sits to the left of the freshness line, with a 1px divider between them. It is a `h-9` bordered chip, focusable, that opens a `Tooltip` on hover or focus.
-  - It holds two mini meters, `5h` and `7d`, each a `w-12 h-1.5` track with a fill and the % in `tabular-nums`. A 1px tick marks a threshold. On 5h the tick is the pause line, from the status feed (`five_h_pause_at`); with no threshold in the feed there is no tick. On 7d it is the weekly budget, which is the % of the week elapsed + 10.
-  - **Normal:** a `gauge` icon and a neutral fill (`foreground/60`).
-  - **7d over budget** (7d past its tick, not paused): the 7d fill and % turn `warning`, followed by `trending-up` and "Over budget".
-  - **Paused** (the feed says `paused`): the chip gets a `warning` border and a 10% tint, and leads with `circle-pause` and "Paused · resets 9:00 PM". The fill that tripped turns `warning`.
-  - **Feed stale** (the status feed is more than 10 minutes old): dashed border, meters at 60% opacity, `clock-alert` and "as of 38m ago" in `warning`.
-  - **Not reported** (no status feed yet): dashed border, `gauge` and "Usage not reported", muted.
-  - **Tooltip:** a title, then 5-hour (% · pauses at X% · reset time), Weekly (% · budget % · pauses at Y%), where each "pauses at" comes from the feed and is left out when the feed has none, a muted line explaining the budget with the weekly reset, and "Reading 2m ago, from the status feed".
-  - **Phone:** the chip shrinks to its icon plus "78% · 61%". Tapping it opens the same detail.
-- **Needs you** (`Card`): one row per item type, oldest first, each linking to its view.
+- **Header** (`h-14`, sticky, inside `SidebarInset`): the `SidebarTrigger`, a 1px divider and the current view's title, then on the right the **cost chip** (below), the freshness line ("Updated 14s ago" with a green dot) and Refresh as a ghost icon button (`size-9`). The mark, "Read-only" and the theme toggle leave the header: the first two move to the sidebar, and the theme lives in Settings.
+- **Cost chip** (#42): it replaces the 5h/7d usage chip (#25) in the same slot, to the left of the freshness line with a 1px divider between them. It is a `h-9` bordered chip: `coins` (muted), the estimated cost so far today ("$38.40", `font-semibold tabular-nums`), then "today · est." muted. It links to Cost. On phones it drops "today · est." and keeps the icon and amount, with an `aria-label` of "Estimated cost today, $38.40".
+  - **No cost source connected:** there is no chip at all, not an empty one.
+  - The usage pause still reaches the owner through the "Paused for usage" Needs-you row below, which reads the status feed as before.
+- **Needs you** (`Card`): one row per item type, oldest first, each linking to its view. Snooze, ack, the footer and History are under Needs you: snooze and ack (#46).
+  - An agent failing turns (#44): `destructive`, `heart-pulse` icon. "Gale is failing turns", then "6 of 14 turns ended in error in the last hour · 52m". When an alert went out, the line adds "· `bell` alerted via ntfy, Slack" (desktop only). It links to Health.
   - A release waiting for approval: `warning`, rocket icon.
   - Red CI on `main`: `destructive`, circle-x icon.
   - `ai-blocked` issues: `destructive`, octagon-alert icon.
@@ -44,9 +43,15 @@ The app is read-only. Every action is an outbound link to GitHub or npm, marked 
 The `ViewTabs` pill row goes. Use the stock shadcn `Sidebar` with `collapsible="icon"`, wrapped in `SidebarProvider` with `SidebarInset` for the page.
 
 - **Top** (`SidebarHeader`): the 32px Hive mark tile, "Hive" (semibold) and "buzz-dashboard" (muted, 12px) under it. It links to `/`.
-- **Views** (`SidebarGroup` labelled "Views"): Agents, Pipeline, Releases, Timeline and Media, as `SidebarMenuButton` links with their lucide icons (`bot`, `git-pull-request`, `rocket`, `activity`, `images`). The current route gets `isActive`.
+- **Views** (`SidebarGroup` labelled "Views"): Agents, Health, Pipeline, Releases, Timeline, Cost and Media, as `SidebarMenuButton` links with their lucide icons (`bot`, `heart-pulse`, `git-pull-request`, `rocket`, `activity`, `coins`, `images`). The current route gets `isActive`. Health and Cost only appear when the history store is configured (#39).
+- **"new" tag:** for 14 days after a view first appears, it carries a muted, outlined "new" pill in the badge slot, unless it has a count to show. It is decoration, so give it `aria-hidden`.
 - **Counts:** a view that owns Needs-you items shows its count in a `SidebarMenuBadge`, as a red pill (same data as `countsByView`). In light mode the pill text is `red-700` on the `destructive/15` tint (about 4.9:1). Plain `text-destructive` is about 3.6:1 there and fails AA, which also fixes the old tab pills.
-- **Bottom** (`SidebarFooter`): a muted "Read-only" line with the `eye` icon (not a link), then Settings (`settings` icon, `/settings`) as a menu button.
+- **Bottom** (`SidebarFooter`): the sign-in block (#40, below), a muted "Read-only" line with the `eye` icon (not a link), then Settings (`settings` icon, `/settings`) as a menu button. When signed in, the line reads "Read-only · snooze and ack".
+- **Sign-in block** (#40), only when sign-in is configured:
+  - **Signed out:** an outlined menu button, `key-round` and "Sign in with Nostr" (NIP-07). In proxy-header mode there is no button, since the proxy already signed you in.
+  - **Signed in:** a bordered row with a 32px initials `Avatar` (the profile picture when there is one), the name (500) and the truncated npub in mono 12px, then `chevrons-up-down`. In proxy mode the second line reads "via proxy · <the header's user>".
+  - **Its menu** (`DropdownMenu`): name and npub, a muted "`key-round` Signed in with a Nostr extension", then Copy npub, "What sign-in unlocks" (`eye`, a link to the docs) and Sign out (`log-out`).
+  - Signing in never unlocks anything outside the dashboard: no posting, no GitHub writes.
 - **Collapsed to the icon rail:** each item shows its icon only. A count becomes a 6px red dot on the icon's top-right corner, and the item's `Tooltip` names it: "Pipeline · 3 need you". Items with no count just show their name. The tooltip opens on hover and on keyboard focus.
 - **State:** the sidebar's own cookie remembers expanded or collapsed, and ⌘B / Ctrl+B toggles it (both are shadcn defaults). There is no "collapsed by default" setting.
 - **Phones** (below `md`): the sidebar becomes a `Sheet` from the left, opened by the menu trigger in the header. Rows are at least 44px tall. Picking a view closes the sheet, and Esc or the close button closes it too.
@@ -56,9 +61,11 @@ The `ViewTabs` pill row goes. Use the stock shadcn `Sidebar` with `collapsible="
 | View | Components |
 |---|---|
 | **Agents** | 4 stat `Card`s (the first is **Running 12 / 14**, with the stopped names as its subline), then a `ToggleGroup` filter (All, Active, Quiet, Stopped) and a `Select` sort, then a `Card` grid (1, 2 or 3 columns). Each card shows `Avatar` (the profile picture, initials as fallback), name, role, a status `Badge`, the **runtime row** (see Runtime status), "Working on" (latest message), last seen, home channel, messages today, and a 7-day sparkline (`BarChart` with no axes). The whole card is one link to the agent page. The "needs attention" sort puts stalled agents first, then quiet ones, and parked agents last. |
-| **Pipeline** | 5 stage stat `Card`s (`ai-ready` … `ai-blocked`, with mono labels). Then a `BarChart` of PRs opened vs merged per day (chart-1 and chart-2, with legend and tooltip), filtered by a `Select` for agent and a `ToggleGroup` for 7d, 14d or 30d. Then a `Table` by repo, with blocked repos first and the ready/wip/review columns hidden on phones. Last, a `Table` by agent, taking the agent from the PR body's `@Name` header. PRs without that header go under "Unattributed". |
+| **Health** | See Health (#44). |
+| **Cost** | See Cost (#42). |
+| **Pipeline** | A `Tabs` row, **Now** and **Flow** (see Pipeline flow, #47). **Now** is the view below. When Custom stages are set, its stage cards are those labels; with the default PR lifecycle they are Opened, In review, Approved and Stalled. Today's view: 5 stage stat `Card`s (`ai-ready` … `ai-blocked`, with mono labels). Then a `BarChart` of PRs opened vs merged per day (chart-1 and chart-2, with legend and tooltip), filtered by a `Select` for agent and a `ToggleGroup` for 7d, 14d or 30d. Then a `Table` by repo, with blocked repos first and the ready/wip/review columns hidden on phones. Last, a `Table` by agent, taking the agent from the PR body's `@Name` header. PRs without that header go under "Unattributed". |
 | **Releases** | A "Waiting for your approval" `Card`, one row per release: repo, version `Badge`, commit subject, how long it has waited (`Badge`), and an outline "Review on GitHub" `Button`. A "Red CI on main" `Card`, one row per failure: repo, job, SHA, how long it has failed (`Badge`), and "View run". Last, a `Table` of npm packages: version and publish date, plus a "Release pending" badge when `main` has unreleased commits. |
-| **Timeline** | A `BarChart` of events per hour today (chart-3, with the current hour in chart-1) and 2 stat `Card`s. Then a live-feed `Card` with a `ToggleGroup` type filter and a `Select` for agent. Rows are grouped by hour under sticky headers. A row that needs the owner gets a 5% status tint and a "Needs you" `Badge`. |
+| **Timeline** | Without a database: a `BarChart` of events per hour today (chart-3, with the current hour in chart-1) and 2 stat `Card`s. Then a live-feed `Card` with a `ToggleGroup` type filter and a `Select` for agent. Rows are grouped by hour under sticky headers. A row that needs the owner gets a 5% status tint and a "Needs you" `Badge`. With the history store, see Timeline (#41). |
 
 ## Runtime status (#24)
 
@@ -129,10 +136,167 @@ The runtime and usage data come from one JSON file, object key `hive/status.json
 - `version` is the schema version, `1` today. The dashboard ignores a feed with a version it doesn't know and treats it as not reported.
 - `runtime` is keyed by hex pubkey. `name` is the agent's display name when the feed was written; the page still takes the live name from the relay and uses `name` only as a fallback.
 - `state` is `running` or `stopped`, and `since` is when it entered that state. Percentages are integers. `last_turn`, `model` and both reset times may be `null`.
-- `five_h_pause_at` and `seven_d_pause_at` are the % at which each window pauses the hive. Either may be missing: the chip then drops that tick and its "pauses at", and without the 7d one the higher reading is taken as the limit that tripped.
+- `five_h_pause_at` and `seven_d_pause_at` are the % at which each window pauses the hive. Either may be missing: the "Paused for usage" row then leaves out its "(pauses at N%)", and without the 7d one the higher reading is taken as the limit that tripped.
 - The feed is **stale** when `published_at` is more than 10 minutes old. Stale data is still shown, with its age.
-- An agent with no `runtime` entry is **not reported**. Leave out `usage` and the chip reads "Usage not reported".
+- An agent with no `runtime` entry is **not reported**. Leave out `usage` and there is no "Paused for usage" row; nothing else reads it, since the cost chip (#42) replaced the usage chip.
 - A failed fetch shows the stale state. It doesn't replace the page with a destructive `Alert`, because the relay and GitHub data still render.
+
+## History views (#39)
+
+Timeline search, Health, Cost, the Pipeline Flow tab, Needs-you history and Alerts all read the optional Postgres history store (#39). Shared rules:
+
+- **Needs you stays on top** of Health, Cost and Timeline like every other view.
+- **Range:** each history view has a `ToggleGroup` range at the top right (Health 1h / 24h / 7d, Cost and Flow 7d / 30d / 90d). Retention defaults to 90 days, so a range never reaches past it.
+- **Source line:** a muted `text-xs` line at the top left says where the numbers come from, with an icon: "`radio` From the relay: turn metrics and presence · live", "`database` History from the database · since Sep 30".
+- **Never a made-up number.** A metric whose source isn't connected shows a dashed box with its name, a one-line description and "not connected" in mono, with no value, no zero and no skeleton. Each view ends with one "Connect a source" outline `Button` (`plug-zap`) that opens Settings → Sources.
+- **Estimated cost** is always labelled "Estimated, at API list price" (see Cost).
+
+## Timeline (#41)
+
+One stream of GitHub events and Buzz-native events (Buzz issues, PRs, project tasks and channel messages), newest first.
+
+- **Search card** (`Card`): a full-width `Input` (`h-11`, `search` icon, a clear `x` and a `/` keyboard hint; `/` focuses it from anywhere on the page). Under it a filter row: repo `Select` (`folder`), agent `Select`, source `Select` (`layers-2`: GitHub + Buzz, GitHub, Buzz), a `ToggleGroup` type filter (All, Messages, Issues, PRs, Labels, Releases) and a range `Select` (`calendar`, "Last 14 days"). On phones the filter row scrolls sideways in one line.
+- **Results line** (only while searching): "**27** results for `example-app#42`", then a muted "Last 14 days · newest first · full-text over messages, GitHub and Buzz issues and PRs, labels and release notes". On the right, a small "Matches per day" bar strip (chart-3, today in chart-1, 44px tall, first date and "Today" under it).
+- **Feed** (`Card`): rows grouped by day under sticky day labels ("**Today** Thu Oct 22 · 8"). Each row is a grid: time (mono, desktop only), a 32px muted icon tile for the event type (`git-merge`, `tag`, `git-pull-request`, `message-square`, `circle-check-big`, `circle-plus`, `rocket`), then the body, then an `external-link` (desktop only) to the event on GitHub or in Buzz.
+  - **Line 1:** the **source badge**, the actor's 20px initials `Avatar` and name (500), the verb (muted: "merged", "labelled", "opened a Buzz PR", "closed a Buzz issue", "posted in #channel", "released"), then the target (key or title in mono, or a version `Badge`).
+  - **Line 2:** the snippet (muted). A label change shows both labels as mono pills with an `arrow-right` between them, then the comment. A search match is wrapped in `<mark>` with `--mark` behind it.
+  - **Line 3:** meta chips (mono 12px, bordered): repo, `#channel`, `project: Example App`, `repo: search-index`, `+184 −12`, `squash · 1d 4h from ai-ready`.
+  - A row that needs the owner keeps the 5% destructive tint and the "Needs you" `Badge` (`octagon-alert`) after the target.
+- **Source badge:** a `h-5` bordered chip, 12px 500 text with a 12px icon. GitHub is `git-branch` + "GitHub" on `card`. Buzz is `hexagon` + "Buzz" on the `--mark` tint. The label carries the meaning, so the tint is only a second cue.
+- **Footer:** muted "Stored since Sep 30 · 41,920 events · 31% from Buzz", and an outline "Load older" `Button`.
+- **Phone:** the time and external link drop out of each row (the whole row links instead), and the grid is icon + body.
+
+## Health (#44)
+
+Is any agent broken right now, and which one?
+
+- **Sources:** presence, turns per hour and "silent while holding a claim" come from the relay. Error, cancelled and max-tokens rates come from the connected cost source (NIP-AM `stopReason`, or OTel `api_error`). With no cost source those columns use the not-connected box, and the strip ranks on presence and silence only.
+- **Hive strip** (`Card` "`heart-pulse` Hive health"): status pills in the header ("`octagon-alert` 1 failing" destructive, "`triangle-alert` 1 silent" warning), "6 healthy · 8 agents" muted on the right. Then one tile per agent, 8 across on desktop and 2 on phones, sorted failing, silent, healthy, idle. A tile has the initials `Avatar` and name, a status line (icon + label) and one muted fact.
+  - **Failing:** error rate over 25% for 15 minutes (the same threshold as the alert rule). `octagon-alert` "Failing", "43% errors · 1h". Destructive border at 55% and a 6% tint.
+  - **Silent:** no turn for 4h while holding a claim. `clock` "Silent 5h", "holds example-cli#124". Warning border and tint.
+  - **Healthy:** `circle-check-big` "Healthy" in `success`, "9 turns/h".
+  - **Idle:** no claim and quiet. `moon` "Idle", "no claim · fine", muted. Idle is not a problem.
+- **Sick-agent card:** the worst agent gets a detail `Card` with a destructive border. Header: avatar, name, a destructive "Failing since 2:20 PM" `Badge`, then outline buttons "Open Gale’s channel" (`message-square`, outbound) and "Stop alerting" (`bell-off`, the same menu as Needs you, signed in only). Body, two columns:
+  - **Left,** a `dl`: Error rate, last hour ("**43%** 6 of 14 turns · hive 3%", the % in destructive), Ended in error ("6 turns (stop reason `error`)"), Cancelled, Hit max tokens, Holding (key in mono · claimed 2d ago) and Presence. Under it a dashed info box: "The relay says *that* a turn failed, not *why*. The error text lives in the agent’s log. Connect a log or OTel source ›".
+  - **Right,** "Turns per hour, last 24h": a stacked `BarChart`, finished turns in chart-3 and error turns in `destructive` on top, with a legend whose Error entry also carries the `octagon-alert` icon. This is the one place a status colour is a chart series, because the series *is* the status.
+  - With no sick agent the card is not shown.
+- **By agent** (`Table`, "24h · sorted by error rate"): Agent, Presence (dot + Online / Away), Turns/h, Error, Cancelled, Max tokens, Silent while holding a claim ("no", "no claim", or `clock` "5h 12m · example-cli#124" in warning), Last turn. A failing row gets the 5% destructive tint and its Error cell is `octagon-alert` + bold destructive. Footer: "Showing 6 of 8 · error = turns whose stop reason was `error`" and "Show all". On phones Presence and the rate columns hide, leaving agent, turns/h, error and last turn.
+- **Needs a log or OTel source** (`Card`, `plug`): "The relay can’t see these. They come from each agent’s log or from OpenTelemetry. Nothing is shown until a source is connected, so these are never guesses." Then four dashed boxes (4 across, 2 on phones): Retries (`refresh-cw`), Dropped turns (`circle-slash`), Last error (`message-circle-warning`), Turn duration (`timer`), each "not connected". v1 has no log source (see Settings → Sources), so these boxes stay "not connected" in v1. Once a log source is specced and connected, each box becomes a real stat and the per-agent table gains those columns.
+- **Needs you** gets one "Agent failing turns" row per failing agent (see Shell). A silent agent stays a Heads-up footer line, as today.
+
+## Cost (#42)
+
+Where the money goes, per agent and per model. Fed by Claude Code OpenTelemetry (`claude_code.cost.usage`, `claude_code.token.usage`).
+
+- **Estimate banner:** a dashed pill at the top, "`info` Estimated, at API list price", with a muted line beside it: "Not what a subscription plan bills. Tokens are exact; dollars are the list-price equivalent." The same pill sits in the Cost card header on phones.
+- **Controls:** a `ToggleGroup` Cost / Tokens (every chart and table switches unit) and a range 7d / 30d / 90d.
+- **4 stat `Card`s:** Today ("$38.40" + "est. · 41.2M tokens"), This week ("$212" + "est. · $184 last week"), Cache hit rate ("87 %" + "of input tokens read from cache"), Top agent ("Fern" + "$72 this week · 34% of total"). 2×2 on phones.
+- **Daily cost per agent, by model** (`Card`, "same scale on every chart · last 7 days"): small multiples, one bordered mini chart per agent, 4 across (2 on phones), the top 4 by cost. Each is a stacked `BarChart` per day (haiku at the bottom, then sonnet, then opus), with the agent's avatar, name and total in its header and day initials under it. **Every mini chart shares one y scale** (gridlines every $5), so a tall bar means more money wherever it is. Legend: opus, sonnet, haiku. Tooltip: "Fern · Thu Oct 22", one line per model with its swatch and amount, then "$16.70 est. · 14.1M tokens · 89% cached". "4 more agents ›" opens the rest.
+- **Two tables side by side** (stacked on phones):
+  - **Top agents by cost** (7 days): Agent, Cost by model (a 10px stacked bar, its length proportional to the agent's cost), Est. cost, Tokens, Cache hit. Tokens and Cache hit hide on phones.
+  - **Cost per channel** (7 days, "from each turn’s channel"): Channel (mono), Est. cost, Turns, plus a muted footer: "Per channel, not per issue: a turn knows its channel, not which issue it worked on." DMs are one row. OpenTelemetry reports carry no channel, so with OTel as the source this card shows a not-connected box in place of the table, and fills in with the per-turn reports of #43.
+- **Not connected:** the stat cards stay with "–" and "not connected" (so the layout doesn't jump), and the charts give way to one `Card`: a 48px `plug-zap` tile, "Connect a cost source", the paragraph "Your agents already report tokens and an estimated cost for every turn. The dashboard can’t read those reports until a cost source is connected. Until then this page stays empty, with no guessed numbers.", three muted `check` lines (daily cost and tokens per agent, split by model; cache hit rate, top agents and cost per channel; cost alerts, e.g. "an agent is over $40 today"), a primary "Connect a cost source" (`plug-zap`, to Settings → Sources) and an outline "How cost data works" (`book-open`, docs). Footer: "Only the hive owner can connect it. The dashboard stays read-only either way." The copy never names the connection method, which differs per deployment (OTel, or the opt-in NIP-46 signer in #43).
+- **Model colours** (see Tokens): `--model-1` opus, `--model-2` sonnet, `--model-3` haiku, assigned by price tier, not by name, so a new model family slots in. They are never orange or terracotta, so the charts don't read as a provider's brand.
+
+## Pipeline flow (#47)
+
+The Flow tab answers "where do PRs wait?", for any repo and with no setup.
+
+- **Header row:** `Tabs` Now / Flow on the left, the source line ("`database` History from the database · since Sep 30"), then range 7d / 30d / 90d, a repo `Select` and an agent `Select` on the right.
+- **4 stat `Card`s:** Median cycle time ("1d 4h", "opened → merged · 3h faster than last week"), Merged ("23", "this week · 19 last week"), Change requests ("0.4 per PR", "15 of 23 approved on first review"), Stalled now ("2", "no activity for 24h or more"). Stalled gets the destructive ring and an `octagon-alert` when it's above zero.
+- **Slowest-step callout** (`Card`): `hourglass` tile, "Slowest step this week: approved, waiting to merge", then "PRs waited a median **9h 20m** for a merge, 2.4× last week. 6 of 23 waited overnight." and an outline "Show those 6 ›" that filters the PR table. It names whichever step grew most against last week; with nothing notable it isn't shown.
+- **Median time in each step, by repo** (`Card`): one horizontal stacked bar per repo (repo in mono on the left, 120px), segments in step order, labelled with hours inside when they fit. A shared x axis in hours (0, 10h, 20h …) with a dashed grid. Legend above. Tooltip: repo, step swatch and median, "median over 3 PRs · last week 3h 10m".
+- **PRs this week** (`Table`, count pill, sort `Select` "Stalled first"): PR (key in mono, title muted under it), Author (avatar + name), Time in each step (a thin stacked bar on a fixed 0 to 3 days scale, so rows compare), Total ("16h so far" while open), State `Badge` (`git-merge` Merged success, `git-pull-request` In review info, `octagon-alert` "Stalled · 2d 3h in review" destructive). A stalled row gets the 5% destructive tint, and its stalled segment is hatched with a dashed destructive outline, so the stall reads without colour. "Showing 6 of 26", "Show all". On phones each row becomes a two-line card and Author hides.
+- **By repo** and **By agent** `Table`s side by side: Repo, Merged, Median cycle, Slowest step; Agent (PR author, from the `@Name` header), Merged, Median cycle, Wait for review.
+- **Stages** (`Card`, `layers-2`, "How Flow splits a PR’s time"), a `RadioGroup`:
+  - **PR lifecycle** (`Default` badge): "Opened → first review → changes → merged. Works on any repo, GitHub or Buzz, with no setup." Steps are Opened → first review, Review and changes, Approved → merged.
+  - **Custom stages** (`Optional` badge): "Use your own labels as stages, in order. For teams that move work through labels." An ordered row of mono label pills with `arrow-right` between them and a "`plus` Add label" ghost button. Unselected, it shows an example row with "Example only. Nothing changes until you pick this." No label names are built in; the example comes from the repo's own labels.
+  - Changing stages saves to the database, so it needs sign-in. Signed out, the card is read-only with "Sign in to change stages".
+- **Stage colours** are a blue ramp, `--stage-1..3` (see Tokens), light to dark in step order, each with a text colour for the in-bar label.
+
+## Needs you: snooze and ack (#46)
+
+Snoozing or acking stops the **alerts**. The item stays on the page.
+
+- **Row actions** (signed in only), after the view link and a 1px divider: two ghost icon `Button`s (`size-9`, 44px on phones), `alarm-clock` ("Snooze alerts") and `check` ("Stop alerting me about this"). Both open the same `DropdownMenu`.
+- **Menu:** title "Stop alerting me about this", the row's line 1 quoted and muted, then three items with the resulting time on the right: `timer` For 1 hour ("until 4:20 PM"), `sun` Until tomorrow ("9:00 AM"), `check` Until it changes ("ack"). A muted footer: "It stays on this page. Alerts stop on every channel, and start again early if it gets worse." "Gets worse" means the count goes up or the tone goes from warning to destructive.
+- **Signed out:** no buttons. The card header shows a muted "`log-in` Sign in to snooze or acknowledge" next to "Oldest first" (desktop only).
+- **Footer** (with the history store): `history` "This week: **14** cleared · avg **3h 10m** to clear · `alarm-clock` 1 snoozed until 9:00 AM · `bell-off` 1 muted until it changes", and "History ›" on the right. A snoozed or muted row keeps its place but its icon and line 1 drop to 62% opacity.
+- **History** (expands inside the card): "Cleared this week" with "newest first · from the database" and a 7d / 30d `ToggleGroup`. A `Table` of Item (icon + label + key), Appeared, Cleared, Time to clear, How ("Merged", "Unblocked by you", "Recovered", "Approved by you"). Footer: median time to clear per type, and "Open in Timeline ›". Appeared and How hide on phones.
+
+## Settings tabs and Alerts (#45)
+
+Settings gets a `Tabs` row: **General** (today's page, still `localStorage` only), **Alerts** and **Sources**. Alerts and Sources live in the database, not the browser, and only the owner can change them.
+
+- **Owner note** at the top of Alerts: "`lock` Only the owner can change alerts · signed in as Sam". Signed out, the tab is visible but read-only: controls disabled, with a "Sign in with Nostr" button in that note.
+- **Where alerts go** (`Card`, `send`, "Add channel" outline button): one row per channel, a 36px icon tile, the name (500) with its badges, the target in mono (truncated), a "Send test" outline button (desktop only) and a `Switch`.
+  - ntfy (`bell-ring`), topic URL.
+  - Slack-compatible webhook (`hash`), "Slack, Discord, Mattermost" muted, URL with the secret part elided (`https://hooks.example.com/services/T0…/B0…`).
+  - Webhook (`webhook`) with a "JSON" badge.
+  - Email (`mail`), address · "uses your SMTP settings".
+  - Buzz DM (`message-square`), an "Opt-in" badge and a warning "`key-round` Needs a posting key" badge: "The dashboard never posts as the hive. To get alerts as a DM, give it a key of its own that can only send to you." A "Set up" button instead of a switch, and the row is dimmed until set up.
+  - Secrets (webhook URLs, SMTP credentials) are never sent back to the page in full: show the elided form only.
+- **What to alert on** (`Card`, `bell`, "Every alert also shows in Needs you"): a `Table` of Alert (icon + name), When, Send to (channel chips, `muted` when on), Repeat, On (`Switch`). Default rules:
+
+| Alert | When | Repeat |
+|---|---|---|
+| Agent failing turns | Over 25% errors for 15 min | Hourly until stopped |
+| Silent while holding a claim | No turn for 4h | Once |
+| Release waiting for approval | After 1h | Every 4h until stopped |
+| Issue blocked | Right away | Once |
+| PR ready to merge | After 2h | Once |
+| Agent over budget (`new` badge, needs a cost source) | An agent goes over $40 today | Once a day |
+
+- **Rule editor:** clicking a rule opens an inline editor under it, on a 5% `info` tint: "When [Any agent ▾] goes over [$ 40] [per day ▾]", a muted hint that repeats the estimate label and gives context from real data ("Fern averaged $10 a day this week, so $40 means something unusual happened."), then Save (primary) and Cancel. Esc cancels.
+- **Card footer:** "`plus` Add rule" and "`moon` Quiet hours 10 PM to 8 AM · only failing agents get through".
+- **Sources** tab: see Settings → Sources below.
+- **Phone:** channel rows drop "Send test" into the row's menu; rule rows become two-line cards with the switch top right (44 × 26px).
+
+## Settings → Sources (#42, #43)
+
+> **Status:** approved by rtorcato on 2026-10-23.
+
+Where the dashboard's numbers come from, and the one place a cost source gets connected. Every "Connect a source" button (History views, Cost not-connected) opens this tab.
+
+- **Owner note** at the top, the same as Alerts: "`lock` Only the owner can change sources · signed in as Sam". **Signed out** (#40), the tab is visible but read-only: the radio, Create/Rotate token and Connect signer are disabled, and the note carries the "Sign in with Nostr" button. Copy buttons still work, since the endpoint and env block hold no secret.
+- **Where the dashboard reads from** (`Card`, `radio`, "Checked every minute" muted on the right): one row per source, a 36px icon tile, the name (500) with a status `Badge`, a muted mono detail line, and a muted "Set in env" tag on the right (under the details on phones).
+  - **Buzz relay** (`radio`), `circle-check-big` "Connected": "wss://relay.example.com · read-only key npub1r3d…q9m4 · last event 3s ago".
+  - **GitHub** (`git-branch`). Connected: "Token for example-org · 4,812 of 5,000 calls left this hour · 12 repos". With no token it shows a warning `Badge` "`triangle-alert` No token" and "Public repos only, 60 API calls an hour. Add GITHUB_TOKEN for private repos and Releases."
+  - **History database** (`database`), "Connected": "Postgres · 41,920 events · since Sep 30 · keeps 90 days". With no `DATABASE_URL` it reads "Not set · live only" (muted), and the history views show their not-connected boxes.
+  - Footer: "`lock` These come from the dashboard’s env file. Change them there and restart. Keys are never shown here." These three rows have no controls. The page never shows a key, token or connection string in full: an npub is truncated, a URL keeps only its host.
+- **Cost source** (`Card`, `coins`, with the dashed "`info` Estimated, at API list price" pill in the header). A `RadioGroup` of two option cards, side by side (stacked on phones). The selected card gets a 1px `foreground` ring.
+  - **OpenTelemetry** + "Recommended" `Badge`: "Each agent sends its own token and cost reports straight to this dashboard. No key leaves your machine." Muted: "Claude Code agents only, for now."
+  - **Owner signer** + "NIP-46" mono chip + "Opt-in · off" `Badge`: "Reads the per-turn reports Buzz already publishes, through your own Nostr signer. No agent changes." Then a warning line, `shield-alert` "Your signer can’t limit this to cost reports, so it could also decrypt your DMs." It is never the default.
+  - **One cost source at a time.** The radio is the only switch, so the two can never double-count. Choosing the other source is a confirm step, not an instant switch: picking the signer opens the signer dialog (below); going back to OTel asks "Switch to OpenTelemetry? The signer connection is closed." and revokes nothing on the signer side by itself (the copy says to revoke it in the signer app).
+- **OpenTelemetry setup**, under the options:
+  - **Status bar.** Connected: `circle-check-big` "Receiving" `Badge`, "7 of 8 agents reporting · last report 40s ago". Not connected: `loader-circle` (static, muted) "No reports yet. This updates by itself when the first agent reports." The page polls; no refresh button.
+  - **Three steps,** each with a 24px round marker: a number (1, 2, 3) on `muted` while not connected, a `check` on a 14% `success` tint once done.
+    1. **Ingest token.** Not connected: a primary "`key-round` Create ingest token" `Button`, with "Agents send it with every report, so nobody else can post numbers to your dashboard. Shown once." Created: a read-only mono field `hive_otel_••••••••••••••7k2q`, "created Oct 22", and an outline "`rotate-ccw` Rotate" that opens an `AlertDialog`: "Rotating it stops every agent’s reports until you paste the new one." The full token is shown once, at creation or rotation, in a copy field, and never again; the server stores only its hash.
+    2. **Endpoint.** A read-only mono field `https://hive.example.internal/otlp` with "`copy` Copy". "Agents must be able to reach this address. It only accepts metrics with a valid ingest token." The URL comes from the dashboard's public URL setting, never hardcoded.
+    3. **"Add this to each agent’s environment in Buzz Desktop, then restart the agent".** A mono env block on `muted` with "`copy` Copy" at its top right (above it on phones):
+
+       ```
+       CLAUDE_CODE_ENABLE_TELEMETRY=1
+       OTEL_METRICS_EXPORTER=otlp
+       OTEL_LOGS_EXPORTER=otlp
+       OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+       OTEL_EXPORTER_OTLP_ENDPOINT=https://hive.example.internal/otlp
+       OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <your ingest token>
+       OTEL_RESOURCE_ATTRIBUTES=agent=<agent name>
+       ```
+
+       The two placeholders render in the warning text colour, and the hint under the block says: "Replace the two highlighted values. The agent name must match its Buzz display name so cost joins the right agent." Right after a token is created, the block fills in the real token for that one view, so the owner can copy it whole.
+  - **Endpoint rule:** the OTLP endpoint rejects any request without a valid ingest token (401, no body detail). The token only lets an agent post metrics. It can't read anything.
+  - **Agents** (`Table`, "reports in the last hour", connected state only): Agent (initials `Avatar` + name), Last report, Tokens today (hidden on phones), Status. Problems first: an agent with no reports gets the 6% `warning` row tint and "`triangle-alert` No reports · check its env"; the rest show `circle-check-big` "Reporting" in `success`. Footer: "Showing 4 of 8 · problems first", "Show all ›".
+- **Card footer:** "`book-open` How cost data works · The dashboard stays read-only either way. It never posts to Buzz or GitHub."
+- **Owner signer dialog** (`Dialog`, `max-w-[520px]`, opens when the signer option is picked):
+  - Title "Read cost through your owner signer?", then "The dashboard will connect to your Nostr signer (a NIP-46 bunker) and ask it to decrypt the per-turn reports your agents publish. Your key stays in the signer."
+  - A destructive box (8% tint, 40% border, `shield-alert`): **"This can also decrypt your DMs"**, "A signer can’t limit decryption to cost reports. If this dashboard were ever compromised, it could ask your signer to decrypt your direct messages too. Use OpenTelemetry unless your agents can’t send it."
+  - "Signer address" `Input`, mono placeholder `bunker://…`, hint "From your signer app. You can revoke it there at any time." The address is a secret: after connecting it shows only as "bunker://…" plus the signer's npub, truncated.
+  - A `Checkbox`: "I understand the dashboard could decrypt my DMs if it were compromised." Unticked by default.
+  - Actions: Cancel (outline) and "`key-round` Connect signer" (primary), **disabled until the box is ticked and the address is filled in**. Cancel, Esc or a click outside closes it and leaves OTel selected. On phones the buttons stack full width, Connect on top.
+- **No log source in v1.** The tab has no log row. Health's Retries, Dropped turns, Last error and Turn duration stay "not connected" until a remote log source is specced and mocked.
+- **Phone:** the source rows drop "Set in env" under the details, the option cards stack, the env block's Copy sits above it, and the agents table keeps Agent, Last report and Status.
 
 ## Media tab
 
@@ -158,7 +322,7 @@ A gallery of every file the agents upload to the public R2 media bucket, served 
 
 ## Settings (#58)
 
-`/settings`, linked from the bottom of the sidebar. The dashboard is read-only and single-user, so every setting is a browser preference.
+`/settings`, linked from the bottom of the sidebar. This section is the **General** tab. The dashboard is read-only and single-user, so every General setting is a browser preference. Alerts and Sources are server-side and owner-only (see Settings tabs and Alerts, #45).
 
 - **Storage:** everything is kept in `localStorage` in this browser, under one versioned key. Nothing is sent anywhere: no analytics, no sync and no server write. Changes apply at once, with no Save button.
 - **Page:** a `max-w-2xl` column. The title "Settings", then a muted line "Preferences for this browser. Changes apply right away.", then a bordered note with the `lock` icon: "Stored in this browser only (localStorage). Nothing is sent anywhere, and nothing here changes the hive."
@@ -196,7 +360,7 @@ What changed from the request in #58, as approved:
 
 ## Components
 
-Use stock shadcn/ui only, with no custom components: `Card`, `Badge`, `Table`, `ToggleGroup`, `Select`, `Avatar`, `Alert`, `Button`, `Dialog`, `Tooltip` and `ScrollArea`. Use shadcn charts (`ChartContainer` + Recharts `BarChart`) for every chart. One exception: the Agents card's 7-day sparkline is a small inline SVG, because it has no axes, tooltip or legend to justify adding Recharts. Switch it to a `BarChart` once another view adds Recharts. Icons come from `lucide-react`. The agent page adds `Breadcrumb` and `Skeleton`. The sidebar and Settings (#58) add `Sidebar`, `Sheet`, `Separator`, `Switch`, `Input` and `AlertDialog`. The one non-shadcn component is [motion-primitives](https://motion-primitives.com) `AnimatedNumber`, which brings in the `motion` package (approved by rtorcato on 2026-10-16). See Motion.
+Use stock shadcn/ui only, with no custom components: `Card`, `Badge`, `Table`, `ToggleGroup`, `Select`, `Avatar`, `Alert`, `Button`, `Dialog`, `Tooltip` and `ScrollArea`. Use shadcn charts (`ChartContainer` + Recharts `BarChart`) for every chart. One exception: the Agents card's 7-day sparkline is a small inline SVG, because it has no axes, tooltip or legend to justify adding Recharts. Switch it to a `BarChart` once another view adds Recharts. Icons come from `lucide-react`. The agent page adds `Breadcrumb` and `Skeleton`. The sidebar and Settings (#58) add `Sidebar`, `Sheet`, `Separator`, `Switch`, `Input` and `AlertDialog`. The history views (#39 to #47) add `Tabs`, `DropdownMenu`, `RadioGroup` and `Checkbox` (the signer dialog); their charts are stacked `BarChart`s (vertical for Health and Cost, `layout="vertical"` for the Flow step bars). The thin per-row bars in the Flow PR table and the Cost top-agents table are plain flex `div`s, like the sparkline, since they have no axes or tooltip. The one non-shadcn component is [motion-primitives](https://motion-primitives.com) `AnimatedNumber`, which brings in the `motion` package (approved by rtorcato on 2026-10-16). See Motion.
 
 ## Motion
 
@@ -204,12 +368,13 @@ Motion explains a change. It never decorates. It runs only when a value changes,
 
 | What moves | How | Timing | Source |
 |---|---|---|---|
-| Usage meter fill moves to its new value | `transform: scaleX()` with `origin-left` | 300ms, `cubic-bezier(0.16, 1, 0.3, 1)` | transitions.dev progress bar; easing from kinetics.colorion.co |
-| 5h / 7d % and "Running N / 14" | `AnimatedNumber`, `springOptions: { bounce: 0, duration: 600 }` | ~600ms | motion-primitives. Use no bounce, so a % never wobbles across a threshold. |
-| Usage chip and status badge change state | `transition-colors`, plus a fade and scale from 95% on the new badge | 200ms ease-out | tw-animate-css (`animate-in fade-in zoom-in-95`) |
+| Cost chip amount and "Running N / 14" | `AnimatedNumber`, `springOptions: { bounce: 0, duration: 600 }` | ~600ms | motion-primitives. Use no bounce, so a % never wobbles across a threshold. |
+| Cost chip and status badge change state | `transition-colors`, plus a fade and scale from 95% on the new badge | 200ms ease-out | tw-animate-css (`animate-in fade-in zoom-in-95`) |
 | Needs-you row appears / leaves | fade and 4px slide from the top / fade out | 200ms in, 150ms out | transitions.dev list item (`animate-in fade-in slide-in-from-top-1`) |
 | Stalled ring appears on a card | `transition-shadow` | 300ms, once | — |
-| Cards re-sort (e.g. a stalled agent moves first) | `motion` `layout` on each card | 300ms, same easing as the fill | motion |
+| Cards re-sort (e.g. a stalled agent moves first) | `motion` `layout` on each card | 300ms, `cubic-bezier(0.16, 1, 0.3, 1)` | motion; easing from kinetics.colorion.co |
+| Snooze menu opens / closes | fade and zoom from 95% | 150ms in, 100ms out | shadcn `DropdownMenu` default |
+| History expands in Needs you, rule editor opens | height via `grid-template-rows: 0fr → 1fr`, plus fade | 200ms ease-out | transitions.dev accordion |
 | Card hover | `translateY(-2px)` and a darker border | 150ms | transitions.dev card lift |
 | Running dot | one `ping` when an agent goes to Running, then a steady dot | 1 × 1s | Tailwind `animate-ping`, run once. Never loop it: 12 pulsing dots is noise. |
 | Agents card → agent page | native View Transitions: `view-transition-name` on the avatar and the name, so they morph into the hero | 250ms, same easing | Next.js `viewTransition` (experimental flag), no extra package |
@@ -218,7 +383,9 @@ No Lottie on these screens. A looping illustration pulls the eye on a screen you
 
 ## Rules
 
-- **Status = color + icon + label**, never color alone. Status colors are never used as chart series.
+- **Status = color + icon + label**, never color alone. Status colors are never used as chart series, with one exception: the Health turns chart, where the error series *is* the status (its legend carries the icon too).
+- **Estimates are labelled.** Every dollar figure says "est." or sits under the "Estimated, at API list price" pill.
+- **Unconnected sources show nothing,** never a zero or a placeholder figure (see History views).
 - **Numbers** use `tabular-nums`. Repo names, SHAs and labels use Geist Mono at 13px.
 - **Charts** have 4px rounded bar tops, a dashed recessive grid, a tooltip on hover, and a legend when there are two or more series.
 - **Touch targets** are at least 36px on desktop, and rows are at least 44px on phones. Keep shadcn's default visible focus ring (`ring`).
@@ -329,6 +496,38 @@ Merge these into `src/app/globals.css`. Values not listed keep the shadcn defaul
   --color-info: var(--info);
 }
 ```
+
+**History views (#39 to #47)** add three sets. Merge them the same way, with `--color-*` aliases in `@theme inline`.
+
+```css
+:root {
+  --model-1: #2a78d6;   /* top price tier (opus) */
+  --model-2: #1baf7a;   /* middle tier (sonnet) */
+  --model-3: #6250d6;   /* low tier (haiku) */
+
+  --stage-1: #86b6ef;  --stage-1-foreground: #0a0a0a;   /* opened → first review, 9.4:1 */
+  --stage-2: #5598e7;  --stage-2-foreground: #0a0a0a;   /* review and changes, 6.6:1 */
+  --stage-3: #104281;  --stage-3-foreground: #ffffff;   /* approved → merged, 9.9:1 */
+
+  --mark: #fde68a;     --mark-foreground: #0a0a0a;      /* search match, Buzz badge, 15.9:1 */
+}
+
+.dark {
+  --model-1: #3987e5;
+  --model-2: #199e70;
+  --model-3: #9085e9;
+
+  --stage-1: #184f95;  --stage-1-foreground: #ffffff;   /* 8.1:1 */
+  --stage-2: #256abf;  --stage-2-foreground: #ffffff;   /* 5.4:1 */
+  --stage-3: #86b6ef;  --stage-3-foreground: #0a0a0a;   /* 9.4:1 */
+
+  --mark: #5c4a00;     --mark-foreground: #fafafa;      /* 8.3:1 */
+}
+```
+
+- **Model colours** pass the colorblind validator as a set in both themes. They are graphics, not text: against the background, light `--model-2` is 2.8:1, under the 3:1 for non-text contrast, so the stacked segments are split by 2px gaps and every value is also in the legend, the tooltip and the top-agents table. Don't use them for text.
+- **Stage colours** run light to dark in step order in light mode and dark to light in dark mode, so the last step is always the most prominent. The in-bar hour labels use the paired `-foreground`, all AA.
+- **`--mark`** is a pale highlight, not `--warning`, and always sits behind text, so it doesn't read as "waiting on you".
 
 ### Type
 
