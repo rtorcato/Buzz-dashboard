@@ -15,16 +15,21 @@ import { useEffect } from "react";
 // doesn't animate, and it jumps straight to new values under reduced motion.
 const SPRING: SpringOptions = { bounce: 0, duration: 600 };
 
+const whole = (n: number) => Math.round(n).toLocaleString();
+
 export function AnimatedNumber({
   value,
   className,
+  format = whole,
 }: {
   value: number;
   className?: string;
+  /** Turns each in-between value into text; whole numbers by default. */
+  format?: (n: number) => string;
 }) {
   const reduced = useReducedMotion();
   const spring = useSpring(value, SPRING);
-  const display = useTransform(spring, (n) => Math.round(n).toLocaleString());
+  const display = useTransform(spring, format);
 
   useEffect(() => {
     if (reduced) spring.jump(value);

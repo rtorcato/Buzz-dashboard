@@ -280,8 +280,8 @@ as "Unattributed".
 
 ## The status feed
 
-Agent runtime state (running or stopped, last turn, model) and the usage chip
-in the header come from one optional JSON file, `hive/status.json`, in the same
+Agent runtime state (running or stopped, last turn, model) and the "Paused for
+usage" Needs-you row come from one optional JSON file, `hive/status.json`, in the same
 R2 bucket as Media. A script on the machine that runs your agents publishes it,
 say every 5 minutes. The dashboard ships no publisher, so you write your own
 against this contract:

@@ -3,6 +3,7 @@
 import {
   Activity,
   Bot,
+  Coins,
   Eye,
   GitPullRequest,
   Images,
@@ -30,8 +31,8 @@ import {
 } from "@/components/ui/sidebar";
 import type { View } from "@/lib/needs-you";
 
-// Media never needs the owner, so it has no count.
-type Item = View | "media";
+// Media and Cost never need the owner, so they have no count.
+type Item = View | "media" | "cost";
 
 // `history: true` marks a view that reads the history store (#39), like
 // Health and Cost; it leaves the sidebar when DATABASE_URL is unset.
@@ -45,6 +46,7 @@ const VIEWS: {
   { view: "pipeline", label: "Pipeline", icon: GitPullRequest },
   { view: "releases", label: "Releases", icon: Rocket },
   { view: "timeline", label: "Timeline", icon: Activity },
+  { view: "cost", label: "Cost", icon: Coins, history: true },
   { view: "media", label: "Media", icon: Images },
 ];
 

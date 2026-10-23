@@ -45,7 +45,7 @@ Create the R2 API token with **Object Read only**, scoped to this one bucket. Th
 
 ### Status feed
 
-Runtime state and usage meters come from one JSON file, `hive/status.json`, in the same bucket. A script on the machine that runs your agents publishes it, for example every 5 minutes. The dashboard reads it on the server and shows the result on the Agents cards, the Agent page and the usage chip in the header. It must not contain secrets, environment values or log contents.
+Runtime state and usage meters come from one JSON file, `hive/status.json`, in the same bucket. A script on the machine that runs your agents publishes it, for example every 5 minutes. The dashboard reads it on the server and shows the result on the Agents cards, the Agent page and the "Paused for usage" row in Needs you. It must not contain secrets, environment values or log contents.
 
 ```json
 {
@@ -74,8 +74,8 @@ Runtime state and usage meters come from one JSON file, `hive/status.json`, in t
 
 - `version` is the schema version, `1` today. A feed with a version the dashboard does not know counts as not reported.
 - `runtime` is keyed by hex pubkey. `state` is `running` or `stopped`, and `since` is when it entered that state. `last_turn`, `model` and both reset times may be `null`.
-- Percentages are integers from 0 to 100. Either `*_pause_at` may be missing, and the usage chip then drops that threshold.
-- Leave out `usage` and the chip reads "Usage not reported". An agent with no `runtime` entry is "not reported", and its card falls back to relay activity.
+- Percentages are integers from 0 to 100. Either `*_pause_at` may be missing, and the "Paused for usage" row then drops that threshold.
+- Leave out `usage` and there is no "Paused for usage" row. An agent with no `runtime` entry is "not reported", and its card falls back to relay activity.
 - The feed is **stale** when `published_at` is more than 10 minutes old. Stale data is still shown, with its age.
 
-The feed is optional. Without it the dashboard still runs, and the runtime row and usage chip say "not reported".
+The feed is optional. Without it the dashboard still runs, and the runtime row says "not reported".

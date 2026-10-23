@@ -3,19 +3,19 @@
 import { ClockAlert, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
+import { CostChip } from "@/components/cost-chip";
 import { Button } from "@/components/ui/button";
-import { UsageChip } from "@/components/usage-chip";
 import { STALE_AFTER_MS } from "@/lib/age";
 import { formatWhen } from "@/lib/format-time";
 import { REFRESH_MS, useSettings } from "@/lib/settings";
-import type { Usage } from "@/lib/status-feed";
 
 export function HeaderActions({
   updatedAt,
-  feed,
+  costToday,
 }: {
   updatedAt: string | null;
-  feed: { usage: Usage | null; publishedAt: number | null; stale: boolean };
+  /** Estimated dollars today, or null with no cost source (#42). */
+  costToday: number | null;
 }) {
   const router = useRouter();
   const settings = useSettings();
@@ -42,8 +42,15 @@ export function HeaderActions({
 
   return (
     <div className="ml-auto flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
-      <UsageChip {...feed} now={now} />
-      <span className="mx-1 hidden h-5 w-px bg-border sm:block" aria-hidden />
+      {costToday !== null && (
+        <>
+          <CostChip value={costToday} />
+          <span
+            className="mx-1 hidden h-5 w-px bg-border sm:block"
+            aria-hidden
+          />
+        </>
+      )}
       {!updatedAt ? (
         <>
           <span
@@ -65,7 +72,7 @@ export function HeaderActions({
           className={stale ? "text-warning tabular-nums" : "tabular-nums"}
           suppressHydrationWarning
         >
-          {/* Phones drop "Updated" to make room for the usage chip. */}
+          {/* Phones drop "Updated" to make room for the cost chip. */}
           <span className="hidden sm:inline">Updated </span>
           {formatWhen(now - age, now, settings)}
         </span>

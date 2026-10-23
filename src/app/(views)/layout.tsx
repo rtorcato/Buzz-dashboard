@@ -12,19 +12,19 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { authMode, getOwner } from "@/lib/auth";
-import { historyEnabled } from "@/lib/history";
+import { costConnected } from "@/lib/cost-source";
+import { costSince, historyEnabled } from "@/lib/history";
 import { countsByView, getNeedsYou } from "@/lib/needs-you";
 import { npubEncode } from "@/lib/npub";
-import { loadStatusFeed } from "@/lib/status-feed";
 
 export default async function ViewsLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const [needsYou, { feed, stale }, jar, owner] = await Promise.all([
+  const [needsYou, costToday, jar, owner] = await Promise.all([
     getNeedsYou(),
-    loadStatusFeed(),
+    readCostToday(),
     cookies(),
     getOwner(),
   ]);
@@ -57,11 +57,7 @@ export default async function ViewsLayout({
               <SidebarTrigger className="-ml-2 size-9 md:size-8" />
               <HeaderActions
                 updatedAt={needsYou.updatedAt}
-                feed={{
-                  usage: feed?.usage ?? null,
-                  publishedAt: feed?.publishedAt ?? null,
-                  stale,
-                }}
+                costToday={costToday}
               />
             </div>
           </header>
@@ -79,4 +75,17 @@ export default async function ViewsLayout({
       </SidebarProvider>
     </TooltipProvider>
   );
+}
+
+// The cost chip's amount (#42): null, so no chip, without a cost source.
+async function readCostToday(): Promise<number | null> {
+  if (!(await costConnected())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  try {
+    return await costSince(today);
+  } catch (err) {
+    console.error("Cost chip:", err);
+    return null;
+  }
 }
