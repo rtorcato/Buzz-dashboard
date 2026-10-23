@@ -8,6 +8,7 @@ import {
   type Item,
   liveMutes,
   rowMute,
+  shownTarget,
 } from "./alerts";
 
 const H = 3_600_000;
@@ -103,6 +104,14 @@ describe("channel URLs", () => {
       "https://hooks.slack.com/se…/T0…/B0…/xy…",
     );
     expect(elide("https://ntfy.sh/alerts-secret")).toBe("https://ntfy.sh/al…");
+  });
+
+  it("hides the whole URL from a signed-out viewer", () => {
+    const raw = "http://10.0.0.5:8080/alerts-secret";
+    expect(shownTarget(raw, true)).toBe("http://10.0.0.5:8080/al…");
+    const hidden = shownTarget(raw, false);
+    expect(hidden).toBe("Hidden until you sign in");
+    expect(hidden).not.toMatch(/10\.0|8080|al/);
   });
 });
 
