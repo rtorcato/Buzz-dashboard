@@ -8,13 +8,14 @@ The design spec for buzz-dashboard. Read it before writing any UI code, and keep
 - **Update:** the fixed sidebar and the Settings page (#58), approved by rtorcato on 2026-10-21.
 - **Update:** the docs site home page (see Docs site), approved by rtorcato on 2026-10-22.
 - **Update:** history and alerts (#39 to #47): Timeline with Buzz events, Health, Cost, Alerts, Needs-you snooze and ack, the generic Pipeline flow and the cost chip, approved by rtorcato on 2026-10-23. They all read the optional history store (#39), and anything that saves needs owner sign-in (#40), so build those two first.
+- **Update:** Settings → Sources (#42, #43), approved by rtorcato on 2026-10-23: connected and not-connected states, the owner-signer confirm dialog, an ingest token on the OTel endpoint, one cost source at a time and no log source in v1.
 - **Mockups:** kept outside the repo and not linked from it. This file is the spec, so build from the text below.
 
 ## Principle
 
 It's a glanceable ops screen, and it answers one question first: **"does anything need me right now?"** The **Needs you** card sits above every view and is never hidden behind one. Everything else is detail.
 
-The app is read-only toward the hive. Every action on GitHub, npm or Buzz is an outbound link, marked with the `external-link` icon, and the dashboard never posts to the relay or GitHub. The one exception to "never posts" is the opt-in Buzz DM alert channel (#45), which sends only to the owner with a posting key of its own, never the hive's. The other exception is the dashboard's own state, and only for the signed-in owner (#40): snooze and ack, alert channels and rules, and custom stages. Signed out, no button writes anything.
+The app is read-only toward the hive. Every action on GitHub, npm or Buzz is an outbound link, marked with the `external-link` icon, and the dashboard never posts to the relay or GitHub. The one exception to "never posts" is the opt-in Buzz DM alert channel (#45), which sends only to the owner with a posting key of its own, never the hive's. The other exception is the dashboard's own state, and only for the signed-in owner (#40): snooze and ack, alert channels and rules, custom stages, and the cost source with its ingest token. Signed out, no button writes anything.
 
 **Without a database** (no `DATABASE_URL`, #39) the dashboard is today's live-only view. Health, Cost and the Pipeline Flow tab leave the sidebar, Timeline shows only the live feed, and Needs you loses its footer, history and snooze/ack. Nothing shows an "add a database" nag.
 
@@ -180,7 +181,7 @@ Is any agent broken right now, and which one?
   - **Right,** "Turns per hour, last 24h": a stacked `BarChart`, finished turns in chart-3 and error turns in `destructive` on top, with a legend whose Error entry also carries the `octagon-alert` icon. This is the one place a status colour is a chart series, because the series *is* the status.
   - With no sick agent the card is not shown.
 - **By agent** (`Table`, "24h · sorted by error rate"): Agent, Presence (dot + Online / Away), Turns/h, Error, Cancelled, Max tokens, Silent while holding a claim ("no", "no claim", or `clock` "5h 12m · example-cli#124" in warning), Last turn. A failing row gets the 5% destructive tint and its Error cell is `octagon-alert` + bold destructive. Footer: "Showing 6 of 8 · error = turns whose stop reason was `error`" and "Show all". On phones Presence and the rate columns hide, leaving agent, turns/h, error and last turn.
-- **Needs a log or OTel source** (`Card`, `plug`): "The relay can’t see these. They come from each agent’s log or from OpenTelemetry. Nothing is shown until a source is connected, so these are never guesses." Then four dashed boxes (4 across, 2 on phones): Retries (`refresh-cw`), Dropped turns (`circle-slash`), Last error (`message-circle-warning`), Turn duration (`timer`), each "not connected". When a source is connected, each box becomes a real stat and the per-agent table gains those columns.
+- **Needs a log or OTel source** (`Card`, `plug`): "The relay can’t see these. They come from each agent’s log or from OpenTelemetry. Nothing is shown until a source is connected, so these are never guesses." Then four dashed boxes (4 across, 2 on phones): Retries (`refresh-cw`), Dropped turns (`circle-slash`), Last error (`message-circle-warning`), Turn duration (`timer`), each "not connected". v1 has no log source (see Settings → Sources), so these boxes stay "not connected" in v1. Once a log source is specced and connected, each box becomes a real stat and the per-agent table gains those columns.
 - **Needs you** gets one "Agent failing turns" row per failing agent (see Shell). A silent agent stays a Heads-up footer line, as today.
 
 ## Cost (#42)
@@ -248,8 +249,53 @@ Settings gets a `Tabs` row: **General** (today's page, still `localStorage` only
 
 - **Rule editor:** clicking a rule opens an inline editor under it, on a 5% `info` tint: "When [Any agent ▾] goes over [$ 40] [per day ▾]", a muted hint that repeats the estimate label and gives context from real data ("Fern averaged $10 a day this week, so $40 means something unusual happened."), then Save (primary) and Cancel. Esc cancels.
 - **Card footer:** "`plus` Add rule" and "`moon` Quiet hours 10 PM to 8 AM · only failing agents get through".
-- **Sources** tab: lists each data source (history database, cost source, log/OTel source) with its status and how to connect it. It is not mocked yet and gets its own mockup before it is built; until then "Connect a source" links to the docs.
+- **Sources** tab: see Settings → Sources below.
 - **Phone:** channel rows drop "Send test" into the row's menu; rule rows become two-line cards with the switch top right (44 × 26px).
+
+## Settings → Sources (#42, #43)
+
+> **Status:** approved by rtorcato on 2026-10-23.
+
+Where the dashboard's numbers come from, and the one place a cost source gets connected. Every "Connect a source" button (History views, Cost not-connected) opens this tab.
+
+- **Owner note** at the top, the same as Alerts: "`lock` Only the owner can change sources · signed in as Sam". **Signed out** (#40), the tab is visible but read-only: the radio, Create/Rotate token and Connect signer are disabled, and the note carries the "Sign in with Nostr" button. Copy buttons still work, since the endpoint and env block hold no secret.
+- **Where the dashboard reads from** (`Card`, `radio`, "Checked every minute" muted on the right): one row per source, a 36px icon tile, the name (500) with a status `Badge`, a muted mono detail line, and a muted "Set in env" tag on the right (under the details on phones).
+  - **Buzz relay** (`radio`), `circle-check-big` "Connected": "wss://relay.example.com · read-only key npub1r3d…q9m4 · last event 3s ago".
+  - **GitHub** (`git-branch`). Connected: "Token for example-org · 4,812 of 5,000 calls left this hour · 12 repos". With no token it shows a warning `Badge` "`triangle-alert` No token" and "Public repos only, 60 API calls an hour. Add GITHUB_TOKEN for private repos and Releases."
+  - **History database** (`database`), "Connected": "Postgres · 41,920 events · since Sep 30 · keeps 90 days". With no `DATABASE_URL` it reads "Not set · live only" (muted), and the history views show their not-connected boxes.
+  - Footer: "`lock` These come from the dashboard’s env file. Change them there and restart. Keys are never shown here." These three rows have no controls. The page never shows a key, token or connection string in full: an npub is truncated, a URL keeps only its host.
+- **Cost source** (`Card`, `coins`, with the dashed "`info` Estimated, at API list price" pill in the header). A `RadioGroup` of two option cards, side by side (stacked on phones). The selected card gets a 1px `foreground` ring.
+  - **OpenTelemetry** + "Recommended" `Badge`: "Each agent sends its own token and cost reports straight to this dashboard. No key leaves your machine." Muted: "Claude Code agents only, for now."
+  - **Owner signer** + "NIP-46" mono chip + "Opt-in · off" `Badge`: "Reads the per-turn reports Buzz already publishes, through your own Nostr signer. No agent changes." Then a warning line, `shield-alert` "Your signer can’t limit this to cost reports, so it could also decrypt your DMs." It is never the default.
+  - **One cost source at a time.** The radio is the only switch, so the two can never double-count. Choosing the other source is a confirm step, not an instant switch: picking the signer opens the signer dialog (below); going back to OTel asks "Switch to OpenTelemetry? The signer connection is closed." and revokes nothing on the signer side by itself (the copy says to revoke it in the signer app).
+- **OpenTelemetry setup**, under the options:
+  - **Status bar.** Connected: `circle-check-big` "Receiving" `Badge`, "7 of 8 agents reporting · last report 40s ago". Not connected: `loader-circle` (static, muted) "No reports yet. This updates by itself when the first agent reports." The page polls; no refresh button.
+  - **Three steps,** each with a 24px round marker: a number (1, 2, 3) on `muted` while not connected, a `check` on a 14% `success` tint once done.
+    1. **Ingest token.** Not connected: a primary "`key-round` Create ingest token" `Button`, with "Agents send it with every report, so nobody else can post numbers to your dashboard. Shown once." Created: a read-only mono field `hive_otel_••••••••••••••7k2q`, "created Oct 22", and an outline "`rotate-ccw` Rotate" that opens an `AlertDialog`: "Rotating it stops every agent’s reports until you paste the new one." The full token is shown once, at creation or rotation, in a copy field, and never again; the server stores only its hash.
+    2. **Endpoint.** A read-only mono field `https://hive.example.internal/otlp` with "`copy` Copy". "Agents must be able to reach this address. It only accepts metrics with a valid ingest token." The URL comes from the dashboard's public URL setting, never hardcoded.
+    3. **"Add this to each agent’s environment in Buzz Desktop, then restart the agent".** A mono env block on `muted` with "`copy` Copy" at its top right (above it on phones):
+
+       ```
+       CLAUDE_CODE_ENABLE_TELEMETRY=1
+       OTEL_METRICS_EXPORTER=otlp
+       OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+       OTEL_EXPORTER_OTLP_ENDPOINT=https://hive.example.internal/otlp
+       OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <your ingest token>
+       OTEL_RESOURCE_ATTRIBUTES=agent=<agent name>
+       ```
+
+       The two placeholders render in the warning text colour, and the hint under the block says: "Replace the two highlighted values. The agent name must match its Buzz display name so cost joins the right agent." Right after a token is created, the block fills in the real token for that one view, so the owner can copy it whole.
+  - **Endpoint rule:** the OTLP endpoint rejects any request without a valid ingest token (401, no body detail). The token only lets an agent post metrics. It can't read anything.
+  - **Agents** (`Table`, "reports in the last hour", connected state only): Agent (initials `Avatar` + name), Last report, Tokens today (hidden on phones), Status. Problems first: an agent with no reports gets the 6% `warning` row tint and "`triangle-alert` No reports · check its env"; the rest show `circle-check-big` "Reporting" in `success`. Footer: "Showing 4 of 8 · problems first", "Show all ›".
+- **Card footer:** "`book-open` How cost data works · The dashboard stays read-only either way. It never posts to Buzz or GitHub."
+- **Owner signer dialog** (`Dialog`, `max-w-[520px]`, opens when the signer option is picked):
+  - Title "Read cost through your owner signer?", then "The dashboard will connect to your Nostr signer (a NIP-46 bunker) and ask it to decrypt the per-turn reports your agents publish. Your key stays in the signer."
+  - A destructive box (8% tint, 40% border, `shield-alert`): **"This can also decrypt your DMs"**, "A signer can’t limit decryption to cost reports. If this dashboard were ever compromised, it could ask your signer to decrypt your direct messages too. Use OpenTelemetry unless your agents can’t send it."
+  - "Signer address" `Input`, mono placeholder `bunker://…`, hint "From your signer app. You can revoke it there at any time." The address is a secret: after connecting it shows only as "bunker://…" plus the signer's npub, truncated.
+  - A `Checkbox`: "I understand the dashboard could decrypt my DMs if it were compromised." Unticked by default.
+  - Actions: Cancel (outline) and "`key-round` Connect signer" (primary), **disabled until the box is ticked and the address is filled in**. Cancel, Esc or a click outside closes it and leaves OTel selected. On phones the buttons stack full width, Connect on top.
+- **No log source in v1.** The tab has no log row. Health's Retries, Dropped turns, Last error and Turn duration stay "not connected" until a remote log source is specced and mocked.
+- **Phone:** the source rows drop "Set in env" under the details, the option cards stack, the env block's Copy sits above it, and the agents table keeps Agent, Last report and Status.
 
 ## Media tab
 
@@ -313,7 +359,7 @@ What changed from the request in #58, as approved:
 
 ## Components
 
-Use stock shadcn/ui only, with no custom components: `Card`, `Badge`, `Table`, `ToggleGroup`, `Select`, `Avatar`, `Alert`, `Button`, `Dialog`, `Tooltip` and `ScrollArea`. Use shadcn charts (`ChartContainer` + Recharts `BarChart`) for every chart. One exception: the Agents card's 7-day sparkline is a small inline SVG, because it has no axes, tooltip or legend to justify adding Recharts. Switch it to a `BarChart` once another view adds Recharts. Icons come from `lucide-react`. The agent page adds `Breadcrumb` and `Skeleton`. The sidebar and Settings (#58) add `Sidebar`, `Sheet`, `Separator`, `Switch`, `Input` and `AlertDialog`. The history views (#39 to #47) add `Tabs`, `DropdownMenu` and `RadioGroup`; their charts are stacked `BarChart`s (vertical for Health and Cost, `layout="vertical"` for the Flow step bars). The thin per-row bars in the Flow PR table and the Cost top-agents table are plain flex `div`s, like the sparkline, since they have no axes or tooltip. The one non-shadcn component is [motion-primitives](https://motion-primitives.com) `AnimatedNumber`, which brings in the `motion` package (approved by rtorcato on 2026-10-16). See Motion.
+Use stock shadcn/ui only, with no custom components: `Card`, `Badge`, `Table`, `ToggleGroup`, `Select`, `Avatar`, `Alert`, `Button`, `Dialog`, `Tooltip` and `ScrollArea`. Use shadcn charts (`ChartContainer` + Recharts `BarChart`) for every chart. One exception: the Agents card's 7-day sparkline is a small inline SVG, because it has no axes, tooltip or legend to justify adding Recharts. Switch it to a `BarChart` once another view adds Recharts. Icons come from `lucide-react`. The agent page adds `Breadcrumb` and `Skeleton`. The sidebar and Settings (#58) add `Sidebar`, `Sheet`, `Separator`, `Switch`, `Input` and `AlertDialog`. The history views (#39 to #47) add `Tabs`, `DropdownMenu`, `RadioGroup` and `Checkbox` (the signer dialog); their charts are stacked `BarChart`s (vertical for Health and Cost, `layout="vertical"` for the Flow step bars). The thin per-row bars in the Flow PR table and the Cost top-agents table are plain flex `div`s, like the sparkline, since they have no axes or tooltip. The one non-shadcn component is [motion-primitives](https://motion-primitives.com) `AnimatedNumber`, which brings in the `motion` package (approved by rtorcato on 2026-10-16). See Motion.
 
 ## Motion
 
