@@ -28,14 +28,18 @@ export function newIngestToken(now = new Date()) {
   return { token, record };
 }
 
+/** The token in an `Authorization: Bearer <token>` header, or null. */
+export const bearerToken = (authorization: string | null) =>
+  /^Bearer\s+(\S+)$/i.exec(authorization?.trim() ?? "")?.[1] ?? null;
+
 /** True when `authorization` carries the token behind `record`. */
 export function checkIngestToken(
   authorization: string | null,
   record: TokenRecord | null,
 ): boolean {
-  const m = /^Bearer\s+(\S+)$/i.exec(authorization?.trim() ?? "");
-  if (!m || !record) return false;
-  const got = Buffer.from(sha256(m[1]), "hex");
+  const token = bearerToken(authorization);
+  if (!token || !record) return false;
+  const got = Buffer.from(sha256(token), "hex");
   const want = Buffer.from(record.hash, "hex");
   return got.length === want.length && timingSafeEqual(got, want);
 }

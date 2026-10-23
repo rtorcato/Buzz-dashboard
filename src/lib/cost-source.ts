@@ -69,14 +69,19 @@ const StoredSignerSchema = SignerRecordSchema.extend({
   clientKey: z.string(),
 });
 
-export const selectSigner = (record: SignerRecord) =>
-  setSetting(SIGNER_KEY, {
+export async function selectSigner(record: SignerRecord) {
+  await setSetting(SIGNER_KEY, {
     ...record,
     clientKey: encryptSecret(record.clientKey),
   });
+  clearOtlpToken();
+}
 
 /** Back to OpenTelemetry. The signer may still list the app until revoked there. */
-export const selectOtel = () => deleteSetting(SIGNER_KEY);
+export async function selectOtel() {
+  await deleteSetting(SIGNER_KEY);
+  clearOtlpToken();
+}
 
 /** The stored ingest token, or null without one or without a database. */
 export const ingestTokenRecord = cache(
@@ -107,5 +112,32 @@ export async function costConnected(): Promise<boolean> {
 export async function rotateIngestToken() {
   const { token, record } = newIngestToken();
   await setSetting(TOKEN_KEY, record);
+  clearOtlpToken();
   return { token, record };
+}
+
+// The OTLP receivers check the token on every report (#66). Reading it per
+// request let a flood of bad-token posts use up the 5-connection pool, so the
+// answer is kept in memory for a few seconds. Every write above clears it, and
+// `generation` stops a read that started before the write from storing the
+// old answer. ponytail: per process; another instance sees a change up to
+// OTLP_TTL_MS late. Move it to a shared store if that ever matters.
+const OTLP_TTL_MS = 10_000;
+let otlpCache: { at: number; record: TokenRecord | null } | null = null;
+let generation = 0;
+
+function clearOtlpToken() {
+  otlpCache = null;
+  generation++;
+}
+
+/** The token the OTLP receivers accept: null without one or while the signer is the source. */
+export async function otlpTokenRecord(
+  now = Date.now(),
+): Promise<TokenRecord | null> {
+  if (otlpCache && now - otlpCache.at < OTLP_TTL_MS) return otlpCache.record;
+  const started = generation;
+  const record = (await loadSignerRecord()) ? null : await ingestTokenRecord();
+  if (started === generation) otlpCache = { at: now, record };
+  return record;
 }
