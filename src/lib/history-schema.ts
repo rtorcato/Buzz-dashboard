@@ -29,6 +29,7 @@ export const events = pgTable(
     /** PR or issue title. */
     title: text("title"),
     url: text("url"),
+    probe: text("probe"),
     /** Message text. */
     body: text("body"),
     /** Source-specific extras, e.g. a PR's labels and number. */
