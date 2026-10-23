@@ -158,7 +158,8 @@ export function CostSourcePicker({
               className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              From your signer app. You can revoke it there at any time.
+              From your signer app. Set it to ask before decrypting, if it can,
+              and revoke it there at any time.
             </p>
           </div>
           <label className="flex items-start gap-2 text-sm">

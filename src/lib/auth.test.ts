@@ -9,6 +9,8 @@ vi.stubEnv("BUZZ_PRIVATE_KEY", "test-key");
 const {
   authMode,
   cookieChallenge,
+  decryptSecret,
+  encryptSecret,
   LOGIN_KIND,
   newChallenge,
   newSession,
@@ -167,5 +169,23 @@ describe("proxyUser", () => {
     });
     expect(proxyUser(h, { ...env, AUTH_PROXY_USERS: "sam, alex" })).toBeNull();
     expect(proxyUser(h, { ...env, AUTH_PROXY_USERS: "sam,kim" })).toBe("kim");
+  });
+});
+
+describe("encryptSecret", () => {
+  it("round-trips and refuses tampering or another key", () => {
+    const value = encryptSecret("a".repeat(64));
+    expect(value).not.toContain("a".repeat(64));
+    expect(decryptSecret(value)).toBe("a".repeat(64));
+    // A fresh IV each time.
+    expect(encryptSecret("x")).not.toBe(encryptSecret("x"));
+    const [iv, body, tag] = value.split(".");
+    const flipped = `${iv}.${body.slice(0, -2)}${body.at(-2) === "A" ? "B" : "A"}${body.at(-1)}.${tag}`;
+    expect(decryptSecret(flipped)).toBeNull();
+    expect(decryptSecret(`${iv}.${body}`)).toBeNull();
+    expect(decryptSecret("a".repeat(64))).toBeNull();
+    vi.stubEnv("BUZZ_PRIVATE_KEY", "rotated");
+    expect(decryptSecret(value)).toBeNull();
+    vi.stubEnv("BUZZ_PRIVATE_KEY", "test-key");
   });
 });

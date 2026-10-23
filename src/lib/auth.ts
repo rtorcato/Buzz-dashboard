@@ -1,6 +1,8 @@
 import "server-only";
 
 import {
+  createCipheriv,
+  createDecipheriv,
   createHash,
   createHmac,
   randomBytes,
@@ -55,11 +57,46 @@ const b64 = (b: Buffer) => b.toString("base64url");
 
 // Derived from the dashboard's own key, so there is no extra secret to set.
 // Rotating BUZZ_PRIVATE_KEY signs everyone out.
-function sessionKey(privateKey = process.env.BUZZ_PRIVATE_KEY): Buffer {
+function derivedKey(
+  context: string,
+  privateKey = process.env.BUZZ_PRIVATE_KEY,
+): Buffer {
   if (!privateKey) throw new Error("BUZZ_PRIVATE_KEY is not set");
-  return createHmac("sha256", privateKey)
-    .update("buzz-dashboard:session:v1")
-    .digest();
+  return createHmac("sha256", privateKey).update(context).digest();
+}
+
+const sessionKey = (privateKey?: string) =>
+  derivedKey("buzz-dashboard:session:v1", privateKey);
+
+// A secret the dashboard stores, e.g. the owner signer's client key (#68),
+// encrypted so a copy of the database alone doesn't yield it. Rotating
+// BUZZ_PRIVATE_KEY makes it unreadable, so it has to be set up again.
+const secretKey = (privateKey?: string) =>
+  derivedKey("buzz-dashboard:stored-secret:v1", privateKey);
+
+/** `plaintext` encrypted with AES-256-GCM, as "<iv>.<ciphertext>.<tag>". */
+export function encryptSecret(plaintext: string, key = secretKey()): string {
+  const iv = randomBytes(12);
+  const c = createCipheriv("aes-256-gcm", key, iv);
+  const body = Buffer.concat([c.update(plaintext, "utf8"), c.final()]);
+  return [iv, body, c.getAuthTag()].map(b64).join(".");
+}
+
+/** The plaintext of an encryptSecret value, or null if forged or malformed. */
+export function decryptSecret(value: string, key = secretKey()): string | null {
+  const [iv, body, tag, extra] = value
+    .split(".")
+    .map((p) => Buffer.from(p, "base64url"));
+  if (!iv || !body || !tag || extra || iv.length !== 12 || tag.length !== 16) {
+    return null;
+  }
+  try {
+    const d = createDecipheriv("aes-256-gcm", key, iv);
+    d.setAuthTag(tag);
+    return Buffer.concat([d.update(body), d.final()]).toString("utf8");
+  } catch {
+    return null;
+  }
 }
 
 const mac = (body: string, key: Buffer) =>

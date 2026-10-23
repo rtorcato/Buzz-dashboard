@@ -2,6 +2,8 @@ import "server-only";
 
 import { connection } from "next/server";
 import { cache } from "react";
+import { z } from "zod";
+import { decryptSecret, encryptSecret } from "./auth";
 import {
   deleteSetting,
   getSetting,
@@ -28,8 +30,19 @@ const SIGNER_KEY = "cost_signer";
 /** The stored owner signer, or null. Not per request: the ingester reads it too. */
 export async function loadSignerRecord(): Promise<SignerRecord | null> {
   if (!historyEnabled()) return null;
-  const parsed = SignerRecordSchema.safeParse(await getSetting(SIGNER_KEY));
-  return parsed.success ? parsed.data : null;
+  const stored = StoredSignerSchema.safeParse(await getSetting(SIGNER_KEY));
+  if (!stored.success) return null;
+  const { clientKey } = stored.data;
+  // A plaintext key stored before #68: use it, and encrypt it in place.
+  const legacy = /^[0-9a-f]{64}$/.test(clientKey);
+  const parsed = SignerRecordSchema.safeParse({
+    ...stored.data,
+    clientKey: legacy ? clientKey : decryptSecret(clientKey),
+  });
+  // Unreadable after a BUZZ_PRIVATE_KEY rotation: the owner reconnects.
+  if (!parsed.success) return null;
+  if (legacy) await selectSigner(parsed.data);
+  return parsed.data;
 }
 
 /** The owner signer for this request, when it is the cost source. */
@@ -50,8 +63,17 @@ export async function signerSince(now = new Date()): Promise<number> {
     : floor;
 }
 
+// The client key is stored encrypted (#68): with the bunker address it is
+// enough to ask the owner's signer to decrypt for us.
+const StoredSignerSchema = SignerRecordSchema.extend({
+  clientKey: z.string(),
+});
+
 export const selectSigner = (record: SignerRecord) =>
-  setSetting(SIGNER_KEY, record);
+  setSetting(SIGNER_KEY, {
+    ...record,
+    clientKey: encryptSecret(record.clientKey),
+  });
 
 /** Back to OpenTelemetry. The signer may still list the app until revoked there. */
 export const selectOtel = () => deleteSetting(SIGNER_KEY);
