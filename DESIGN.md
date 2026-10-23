@@ -135,7 +135,7 @@ The runtime and usage data come from one JSON file, object key `hive/status.json
 - `version` is the schema version, `1` today. The dashboard ignores a feed with a version it doesn't know and treats it as not reported.
 - `runtime` is keyed by hex pubkey. `name` is the agent's display name when the feed was written; the page still takes the live name from the relay and uses `name` only as a fallback.
 - `state` is `running` or `stopped`, and `since` is when it entered that state. Percentages are integers. `last_turn`, `model` and both reset times may be `null`.
-- `five_h_pause_at` and `seven_d_pause_at` are the % at which each window pauses the hive. Either may be missing: the chip then drops that tick and its "pauses at", and without the 7d one the higher reading is taken as the limit that tripped.
+- `five_h_pause_at` and `seven_d_pause_at` are the % at which each window pauses the hive. Either may be missing: the "Paused for usage" row then leaves out its "(pauses at N%)", and without the 7d one the higher reading is taken as the limit that tripped.
 - The feed is **stale** when `published_at` is more than 10 minutes old. Stale data is still shown, with its age.
 - An agent with no `runtime` entry is **not reported**. Leave out `usage` and there is no "Paused for usage" row; nothing else reads it, since the cost chip (#42) replaced the usage chip.
 - A failed fetch shows the stale state. It doesn't replace the page with a destructive `Alert`, because the relay and GitHub data still render.
