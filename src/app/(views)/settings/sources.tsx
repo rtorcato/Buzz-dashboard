@@ -10,12 +10,12 @@ import {
   Lock,
   type LucideIcon,
   Radio,
-  ShieldAlert,
   TriangleAlert,
 } from "lucide-react";
 import { headers } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { CostSourcePicker } from "@/components/cost-source-picker";
 import { OtelSetup } from "@/components/otel-setup";
 import { SignInButton } from "@/components/sign-in";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -23,7 +23,7 @@ import { Card } from "@/components/ui/card";
 import { formatAge } from "@/lib/age";
 import { authMode, getOwner } from "@/lib/auth";
 import { COST_DOCS, formatTokens } from "@/lib/cost";
-import { ingestTokenRecord } from "@/lib/cost-source";
+import { ingestTokenRecord, signerRecord } from "@/lib/cost-source";
 import { readServerEnv } from "@/lib/env";
 import { envList } from "@/lib/github";
 import { costReporters, historyEnabled, historyStats } from "@/lib/history";
@@ -31,7 +31,7 @@ import type { Agent } from "@/lib/hive";
 import { maskToken } from "@/lib/ingest-token";
 import { npubEncode } from "@/lib/npub";
 
-// DESIGN.md → Settings → Sources (#42). Where the numbers come from, and the
+// DESIGN.md → Settings → Sources (#42, #43). Where the numbers come from, and the
 // one place the cost source is connected. Signed out it is read-only.
 
 const AGENT_ROWS = 4;
@@ -104,16 +104,18 @@ export async function SourcesTab({
   } catch {
     env = null;
   }
-  const [owner, record, stats, reporters, github, url] = await Promise.all([
-    getOwner(),
-    ingestTokenRecord().catch(() => null),
-    history ? historyStats().catch(() => null) : null,
-    history
-      ? costReporters(new Date(now - 7 * 86_400_000), today).catch(() => [])
-      : [],
-    env?.githubToken ? githubLine(env.githubToken) : null,
-    endpoint(),
-  ]);
+  const [owner, record, signer, stats, reporters, github, url] =
+    await Promise.all([
+      getOwner(),
+      ingestTokenRecord().catch(() => null),
+      signerRecord().catch(() => null),
+      history ? historyStats().catch(() => null) : null,
+      history
+        ? costReporters(new Date(now - 7 * 86_400_000), today).catch(() => [])
+        : [],
+      env?.githubToken ? githubLine(env.githubToken) : null,
+      endpoint(),
+    ]);
   const canEdit = owner !== null && history;
 
   let dashboardKey: string | null = null;
@@ -253,38 +255,27 @@ export async function SourcesTab({
           </span>
         </div>
 
-        {/* One cost source at a time: the radio is the only switch (#43
-            adds the signer behind its confirm dialog). */}
-        <fieldset className="grid gap-3 md:grid-cols-2">
-          <legend className="sr-only">Cost source</legend>
-          <SourceOption
-            checked
-            disabled={!canEdit}
-            title="OpenTelemetry"
-            badge="Recommended"
-            text="Each agent sends its own token and cost reports straight to this dashboard. No key leaves your machine."
-          >
-            <span className="block text-xs text-muted-foreground">
-              Claude Code agents only, for now.
-            </span>
-          </SourceOption>
-          <SourceOption
-            checked={false}
-            disabled
-            title="Owner signer"
-            chip="NIP-46"
-            badge="Opt-in · off"
-            text="Reads the per-turn reports Buzz already publishes, through your own Nostr signer. No agent changes."
-          >
-            <span className="flex items-start gap-1.5 text-xs text-warning">
-              <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              Your signer can’t limit this to cost reports, so it could also
-              decrypt your DMs.
-            </span>
-          </SourceOption>
-        </fieldset>
+        <CostSourcePicker
+          source={signer ? "signer" : "otel"}
+          canEdit={canEdit}
+        />
 
-        {history ? (
+        {signer ? (
+          <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-1 rounded-md border border-success/20 bg-success/10 px-1.5 py-0.5 text-xs font-medium text-success">
+              <CircleCheckBig className="size-3" aria-hidden />
+              Connected
+            </span>
+            <span className="font-mono">bunker://…</span>·
+            <span className="font-mono">
+              {short(npubEncode(signer.pubkey))}
+            </span>
+            ·{" "}
+            {lastReport
+              ? `last turn ${formatAge(now - lastReport)} ago`
+              : "No turns read yet. This updates by itself within a minute or two."}
+          </p>
+        ) : history ? (
           <OtelSetup
             endpoint={url}
             token={
@@ -306,7 +297,7 @@ export async function SourcesTab({
           </p>
         )}
 
-        {record && rows.length > 0 && (
+        {!signer && record && rows.length > 0 && (
           <AgentsTable rows={rows} showAll={showAll} now={now} />
         )}
 
@@ -397,58 +388,6 @@ function Badge({
       <Icon className="size-3" aria-hidden />
       {children}
     </span>
-  );
-}
-
-function SourceOption({
-  checked,
-  disabled,
-  title,
-  chip,
-  badge,
-  text,
-  children,
-}: {
-  checked: boolean;
-  disabled: boolean;
-  title: string;
-  chip?: string;
-  badge: string;
-  text: string;
-  children: ReactNode;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex gap-3 rounded-lg border p-4",
-        checked && "ring-1 ring-foreground",
-        disabled && !checked && "opacity-70",
-      )}
-    >
-      <input
-        type="radio"
-        name="cost-source"
-        checked={checked}
-        disabled={disabled}
-        readOnly
-        className="mt-1 size-4 accent-foreground"
-      />
-      <span className="min-w-0 space-y-1.5">
-        <span className="flex flex-wrap items-center gap-2 font-medium">
-          {title}
-          {chip && (
-            <span className="rounded border px-1 font-mono text-xs font-normal">
-              {chip}
-            </span>
-          )}
-          <span className="rounded-md border px-1.5 text-xs font-normal text-muted-foreground">
-            {badge}
-          </span>
-        </span>
-        <span className="block text-sm text-muted-foreground">{text}</span>
-        {children}
-      </span>
-    </label>
   );
 }
 

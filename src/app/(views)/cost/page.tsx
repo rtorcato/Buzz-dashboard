@@ -37,9 +37,9 @@ import {
   tierNames,
   total,
 } from "@/lib/cost";
-import { costConnected } from "@/lib/cost-source";
-import { costByDay, historyEnabled } from "@/lib/history";
-import { dayStarts } from "@/lib/hive";
+import { costConnected, signerRecord } from "@/lib/cost-source";
+import { costByChannel, costByDay, historyEnabled } from "@/lib/history";
+import { dayStarts, loadHive } from "@/lib/hive";
 
 export const metadata: Metadata = { title: "Cost · Hive" };
 
@@ -75,7 +75,7 @@ export default async function CostPage({ searchParams }: PageProps<"/cost">) {
   const params = await searchParams;
   const rangeParam = one(params.range);
   const range: CostRange =
-    rangeParam && Object.hasOwn(COST_RANGES, rangeParam)
+    rangeParam && rangeParam in COST_RANGES
       ? (rangeParam as CostRange)
       : DEFAULT_COST_RANGE;
   const unit: CostUnit = one(params.unit) === "tokens" ? "tokens" : "cost";
@@ -129,6 +129,19 @@ export default async function CostPage({ searchParams }: PageProps<"/cost">) {
   const names = tierNames(s.tiers);
   const period = days === 7 ? "last 7 days" : `last ${days} days`;
   const showAll = one(params.agents) === "all";
+  // Only the owner signer's per-turn reports (#43) carry a channel.
+  const perChannel = (await signerRecord())
+    ? await Promise.all([
+        costByChannel(new Date(now.getTime() - 7 * 86_400_000)),
+        loadHive(),
+      ]).then(
+        ([rows, h]) => ({ rows, names: h.hive?.channels ?? {} }),
+        (err) => {
+          console.error("Cost per channel:", err);
+          return null;
+        },
+      )
+    : null;
   const charted = showAll ? s.agents : s.agents.slice(0, MINI_CHARTS);
 
   return (
@@ -213,13 +226,17 @@ export default async function CostPage({ searchParams }: PageProps<"/cost">) {
               <div>
                 <h3 className="font-medium">Cost per channel</h3>
                 <p className="text-xs text-muted-foreground">
-                  from each turn’s channel
+                  from each turn’s channel · last 7 days
                 </p>
               </div>
-              <NotConnectedBox
-                name="Cost per channel"
-                text="Needs per-turn reports, which carry each turn’s channel. Cost reports from OpenTelemetry don’t."
-              />
+              {perChannel ? (
+                <ChannelTable {...perChannel} />
+              ) : (
+                <NotConnectedBox
+                  name="Cost per channel"
+                  text="Needs per-turn reports, which carry each turn’s channel. Cost reports from OpenTelemetry don’t."
+                />
+              )}
               <p className="text-xs text-muted-foreground">
                 Per channel, not per issue: a turn knows its channel, not which
                 issue it worked on.
@@ -459,6 +476,51 @@ function MiniCharts({
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function ChannelTable({
+  rows,
+  names,
+}: {
+  rows: { channel: string | null; cost: number; turns: number }[];
+  names: Record<string, string>;
+}) {
+  if (!rows.length) {
+    return (
+      <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+        No turns with a channel in the last 7 days.
+      </p>
+    );
+  }
+  // ponytail: a channel the relay doesn't name (a DM, say) shows its id.
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full text-sm">
+        <thead className="text-left text-xs text-muted-foreground">
+          <tr className="border-b">
+            <th className="px-4 py-2 font-medium">Channel</th>
+            <th className="px-2 py-2 text-right font-medium">Est. cost</th>
+            <th className="px-4 py-2 text-right font-medium">Turns</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {rows.map((r) => (
+            <tr key={r.channel}>
+              <td className="max-w-48 truncate px-4 py-2.5 font-mono text-xs">
+                {(r.channel && names[r.channel]) ?? r.channel}
+              </td>
+              <td className="px-2 py-2.5 text-right tabular-nums">
+                {formatUsd(r.cost)}
+              </td>
+              <td className="px-4 py-2.5 text-right tabular-nums">
+                {r.turns.toLocaleString("en-US")}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
