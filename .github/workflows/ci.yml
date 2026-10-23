@@ -24,6 +24,16 @@ jobs:
           node-version: "24"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # A schema change must ship its migration: the server only applies what
+      # is committed under drizzle/. generate reads the schema, no database.
+      - name: Check drizzle/ matches the schema
+        run: |
+          pnpm db:generate
+          if ! git diff --quiet -- drizzle/ || [ -n "$(git ls-files --others --exclude-standard -- drizzle/)" ]; then
+            git status --short -- drizzle/
+            echo "::error::The schema changed without a migration: run pnpm db:generate and commit drizzle/"
+            exit 1
+          fi
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
