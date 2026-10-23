@@ -4,7 +4,18 @@ import path from "node:path";
 import { where } from "@rtorcato/db-common";
 import { toDrizzleWhere } from "@rtorcato/db-drizzle";
 import { createDb, type DbHandle } from "@rtorcato/db-drizzle/connection";
-import { count, desc, lt, min } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  ilike,
+  isNotNull,
+  lt,
+  min,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { events, type HistoryEvent } from "./history-schema";
 
@@ -64,8 +75,11 @@ export type EventQuery = {
   source?: "github" | "buzz";
   kinds?: string[];
   repo?: string;
-  actor?: string;
+  /** Any of these actors: an agent's name and its pubkeys. */
+  actors?: string[];
   channel?: string;
+  /** Case-insensitive substring of the title, body or repo. */
+  text?: string;
   /** Default 100, at most 1000. */
   limit?: number;
 };
@@ -79,30 +93,79 @@ const COLS = {
   channel: events.channel,
 };
 
-/** Stored events matching every given filter, newest first. */
-export function listEvents(q: EventQuery = {}): Promise<HistoryEvent[]> {
+// Every filter in `q` as one condition; limit is not a filter.
+function matching(q: EventQuery): SQL | undefined {
   const filter = Object.fromEntries(
     Object.entries({
       at: { gte: q.since, lt: q.until },
       source: q.source,
       kind: q.kinds && { in: q.kinds },
       repo: q.repo,
-      actor: q.actor,
+      actor: q.actors && { in: q.actors },
       channel: q.channel,
     }).filter(([, v]) => v !== undefined),
   );
   // where() keeps undefined operator values, so drop them per column.
   const conds = where(filter).filter((c) => c.val !== undefined);
+  const text = q.text?.trim();
+  // Escape LIKE wildcards so "50%" matches itself.
+  const like = text && `%${text.replace(/[\\%_]/g, "\\$&")}%`;
+  return and(
+    toDrizzleWhere(conds, COLS),
+    like
+      ? or(
+          ilike(events.title, like),
+          ilike(events.body, like),
+          ilike(events.repo, like),
+        )
+      : undefined,
+  );
+}
+
+/** Stored events matching every given filter, newest first. */
+export function listEvents(q: EventQuery = {}): Promise<HistoryEvent[]> {
   return historyDb()
     .select()
     .from(events)
-    .where(toDrizzleWhere(conds, COLS))
+    .where(matching(q))
     .orderBy(desc(events.at), desc(events.sourceId))
     .limit(Math.min(Math.max(q.limit ?? 100, 1), 1000));
 }
 
+/**
+ * How many events match, per day in `timeZone` (an IANA name), oldest first.
+ * Days with no match are left out. For the Timeline's "Matches per day".
+ */
+export async function countEventsByDay(
+  q: EventQuery,
+  timeZone: string,
+): Promise<{ day: Date; count: number }[]> {
+  const day = sql<Date>`date_trunc('day', ${events.at}, ${timeZone})`;
+  const rows = await historyDb()
+    .select({ day, count: count() })
+    .from(events)
+    .where(matching(q))
+    // By position: the time zone is a bound parameter, so repeating `day`
+    // would be a different expression to Postgres.
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
+  return rows.map((r) => ({ day: new Date(r.day), count: r.count }));
+}
+
+/** Every repo with a stored event, A to Z, for the repo filter. */
+export async function historyRepos(): Promise<string[]> {
+  const rows = await historyDb()
+    .selectDistinct({ repo: events.repo })
+    .from(events)
+    .where(isNotNull(events.repo))
+    .orderBy(events.repo);
+  return rows.flatMap((r) => (r.repo ? [r.repo] : []));
+}
+
 export type HistoryStats = {
   events: number;
+  /** How many of them came from Buzz. */
+  buzz: number;
   /** The oldest stored event, or null when the store is empty. */
   since: Date | null;
   retentionDays: number;
@@ -111,10 +174,17 @@ export type HistoryStats = {
 /** For the "History from the database · since Sep 30" source lines. */
 export async function historyStats(): Promise<HistoryStats> {
   const [row] = await historyDb()
-    .select({ events: count(), since: min(events.at) })
+    .select({
+      events: count(),
+      buzz: sql<number>`count(*) filter (where ${events.source} = 'buzz')`.mapWith(
+        Number,
+      ),
+      since: min(events.at),
+    })
     .from(events);
   return {
     events: row?.events ?? 0,
+    buzz: row?.buzz ?? 0,
     since: row?.since ?? null,
     retentionDays: retentionDays(),
   };

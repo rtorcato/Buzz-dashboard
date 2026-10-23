@@ -52,6 +52,8 @@ export type Hive = {
   feed: FeedItem[];
   /** Messages per local hour today, 24 entries. */
   hourly: number[];
+  /** Channel name by id (the `h` tag), for history rows that store the id. */
+  channels: Record<string, string>;
 };
 
 // Renamed agents, from AGENT_ALIASES: a JSON object of former → current
@@ -289,7 +291,7 @@ export function buildHive(
     };
   });
 
-  return { agents, feed, hourly };
+  return { agents, feed, hourly, channels: Object.fromEntries(channels) };
 }
 
 // The relay returns at most 1000 events per filter, newest first, whatever the
