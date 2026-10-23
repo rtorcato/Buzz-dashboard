@@ -14,13 +14,14 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { LocalTime } from "@/components/local-time";
 import { EmptyState, SourceDown } from "@/components/states";
 import { TimelineFilters } from "@/components/timeline-filters";
+import { TimelineLiveStats } from "@/components/timeline-live-stats";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { loadGitHub } from "@/lib/github";
 import {
   countEventsByDay,
   type EventQuery,
@@ -30,10 +31,14 @@ import {
   listEvents,
 } from "@/lib/history";
 import { agentName, dayStarts, loadHive } from "@/lib/hive";
+import { githubRows } from "@/lib/ingest";
 import { npubEncode } from "@/lib/npub";
 import {
   type DayGroup,
+  type Filters,
   groupByDay,
+  liveEvents,
+  liveMatches,
   type Names,
   parseFilters,
   RANGES,
@@ -62,6 +67,8 @@ const ICONS: Record<RowIcon, LucideIcon> = {
 // views; row times use the viewer's Time settings.
 const dayStart = (at: number) =>
   new Date(at * 1000).setHours(0, 0, 0, 0) / 1000;
+const hourStart = (at: number) =>
+  new Date(at * 1000).setMinutes(0, 0, 0) / 1000;
 // "Thu Oct 22", without the comma en-US puts after the weekday.
 const dateLabel = (at: number) =>
   new Date(at * 1000)
@@ -203,31 +210,46 @@ function DayLabel({ group, today }: { group: DayGroup; today: number }) {
   );
 }
 
-// "Matches per day" (DESIGN.md → Timeline → Results line): today in chart-1.
-function MatchStrip({ days, counts }: { days: number[]; counts: number[] }) {
+// A bar per bucket, the `current` one in chart-1: "Matches per day" (DESIGN.md
+// → Timeline → Results line) and the live view's events per hour today.
+function Strip({
+  keys,
+  counts,
+  current,
+  label,
+  caption: [start, middle, end],
+  className,
+}: {
+  keys: number[];
+  counts: number[];
+  current: number;
+  label: string;
+  caption: [string, string, string];
+  className?: string;
+}) {
   const max = Math.max(1, ...counts);
   return (
-    <figure className="hidden w-full max-w-md shrink-0 md:block">
+    <figure className={cn("w-full shrink-0", className)}>
       <div
         className="flex h-11 items-end gap-0.5"
         role="img"
-        aria-label={`Matches per day: ${counts.join(", ")}, oldest first`}
+        aria-label={`${label}: ${counts.join(", ")}, oldest first`}
       >
         {counts.map((c, i) => (
           <span
-            key={days[i]}
+            key={keys[i]}
             className={cn(
               "flex-1 rounded-t-sm",
-              i === counts.length - 1 ? "bg-chart-1" : "bg-chart-3",
+              i === current ? "bg-chart-1" : "bg-chart-3",
             )}
             style={{ height: `${Math.max(4, (c / max) * 100)}%` }}
           />
         ))}
       </div>
       <figcaption className="mt-1 flex justify-between text-xs text-muted-foreground">
-        <span>{shortDate(new Date(days[0] * 1000))}</span>
-        <span>Matches per day</span>
-        <span>Today</span>
+        <span>{start}</span>
+        <span>{middle}</span>
+        <span>{end}</span>
       </figcaption>
     </figure>
   );
@@ -241,19 +263,9 @@ const short = (hex: string) => {
 export default async function TimelinePage({
   searchParams,
 }: PageProps<"/timeline">) {
-  // DESIGN.md: without a database Timeline leaves the sidebar. "Open on"
-  // can still name it, so land on Agents rather than a 404.
-  if (!historyEnabled()) redirect("/agents");
-
   const params = await searchParams;
   const filters = parseFilters(params);
-  const limit = Math.min(
-    MAX_ROWS,
-    Math.max(PAGE_SIZE, Number(params.n) || PAGE_SIZE),
-  );
   const now = new Date();
-  const days = dayStarts(now, RANGES[filters.range].days);
-
   const { hive } = await loadHive();
   const agents = hive?.agents ?? [];
   const byKey = new Map(
@@ -266,20 +278,35 @@ export default async function TimelinePage({
     channel: (id) => hive?.channels[id] ?? null,
   };
   const agent = agents.find((a) => a.name === filters.agent);
+  // GitHub rows name the agent (maybe by a former name); Buzz rows key it.
+  const actors = filters.agent
+    ? [filters.agent, ...(agent?.formerNames ?? []), ...(agent?.pubkeys ?? [])]
+    : null;
 
+  if (!historyEnabled()) {
+    return (
+      <LiveTimeline
+        filters={filters}
+        actors={actors}
+        agents={agents.map((a) => a.name).sort()}
+        // Live Buzz events carry the channel's name, not its id.
+        names={{ ...names, channel: (name) => name }}
+        now={now}
+      />
+    );
+  }
+
+  const limit = Math.min(
+    MAX_ROWS,
+    Math.max(PAGE_SIZE, Number(params.n) || PAGE_SIZE),
+  );
+  const days = dayStarts(now, RANGES[filters.range].days);
   const query: EventQuery = {
     since: new Date(days[0] * 1000),
     source: filters.source ?? undefined,
     kinds: filters.type ? [...TYPES[filters.type].kinds] : undefined,
     repo: filters.repo ?? undefined,
-    // GitHub rows name the agent (maybe by a former name); Buzz rows key it.
-    actors: filters.agent
-      ? [
-          filters.agent,
-          ...(agent?.formerNames ?? []),
-          ...(agent?.pubkeys ?? []),
-        ]
-      : undefined,
+    actors: actors ?? undefined,
     text: filters.q || undefined,
   };
 
@@ -339,7 +366,18 @@ export default async function TimelinePage({
                 text, PR and issue titles and repo names
               </p>
             </div>
-            <MatchStrip days={days} counts={counts} />
+            <Strip
+              keys={days}
+              counts={counts}
+              current={counts.length - 1}
+              label="Matches per day"
+              caption={[
+                shortDate(new Date(days[0] * 1000)),
+                "Matches per day",
+                "Today",
+              ]}
+              className="hidden max-w-md md:block"
+            />
           </div>
         )}
       </Card>
@@ -406,4 +444,109 @@ async function readHistory(query: EventQuery, limit: number, search: boolean) {
     search ? countEventsByDay(query, timeZone) : null,
   ]);
   return { events, stats, repos, perDay };
+}
+
+// DESIGN.md → Views → Timeline without a database (#53): today's events from
+// the GitHub and relay reads the other views already make, grouped by hour.
+// No search, no range and no "stored since" footer, and no nag to add one.
+// ponytail: no "Needs you" tint on rows yet; Needs you counts items per type,
+// not per PR, so it needs per-item keys first.
+async function LiveTimeline({
+  filters,
+  actors,
+  agents,
+  names,
+  now,
+}: {
+  filters: Filters;
+  actors: string[] | null;
+  agents: string[];
+  names: Names;
+  now: Date;
+}) {
+  const [{ hive }, { github }] = await Promise.all([loadHive(), loadGitHub()]);
+  const today = dayStart(now.getTime() / 1000);
+  const events = liveEvents(
+    github ? githubRows(github) : [],
+    hive?.feed ?? [],
+    today,
+  );
+  const all = events.map((e) => toRow(e, names));
+  const rows = events
+    .filter((e) => liveMatches(e, filters.type, actors))
+    .map((e) => toRow(e, names));
+  const groups = groupByDay(rows, hourStart);
+
+  const hours = Array.from(
+    { length: 24 },
+    (_, h) => new Date(now).setHours(h, 0, 0, 0) / 1000,
+  );
+  const perHour = hours.map(
+    (h) => all.filter((r) => hourStart(r.at) === h).length,
+  );
+  const active = new Set(
+    all.map((r) => r.actor).filter((a) => agents.includes(a)),
+  ).size;
+
+  return (
+    <div className="space-y-6">
+      <h2 className="sr-only">Timeline</h2>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Card className="col-span-2 justify-center gap-0 p-5">
+          <Strip
+            keys={hours}
+            counts={perHour}
+            current={now.getHours()}
+            label="Events per hour today"
+            caption={["Midnight", "Events per hour today", "11 PM"]}
+          />
+        </Card>
+        <TimelineLiveStats
+          events={all.length}
+          buzz={all.filter((r) => r.source === "buzz").length}
+          active={active}
+          agents={agents.length}
+        />
+      </div>
+
+      <Card className="gap-0 overflow-visible py-0">
+        <div className="px-4 py-4 sm:px-6">
+          <TimelineFilters filters={filters} repos={[]} agents={agents} live />
+        </div>
+        {rows.length === 0 ? (
+          <p className="border-t px-4 py-10 text-center text-muted-foreground sm:px-6">
+            {filters.type || filters.agent ? (
+              <>
+                No events today match these filters.{" "}
+                <Link href="/timeline" className="underline underline-offset-3">
+                  Clear filters
+                </Link>
+              </>
+            ) : (
+              "Nothing yet today. GitHub and Buzz events show up here as they happen."
+            )}
+          </p>
+        ) : (
+          groups.map((g) => (
+            <section key={g.start} className="border-t">
+              <h3 className="sticky top-14 z-[1] border-b bg-muted/60 px-4 py-2 text-xs backdrop-blur sm:px-6">
+                <span className="font-semibold">
+                  <LocalTime at={g.start} />
+                </span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {g.rows.length}
+                </span>
+              </h3>
+              <ol className="divide-y">
+                {g.rows.map((r) => (
+                  <FeedRow key={r.id} row={r} q="" />
+                ))}
+              </ol>
+            </section>
+          ))
+        )}
+      </Card>
+    </div>
+  );
 }

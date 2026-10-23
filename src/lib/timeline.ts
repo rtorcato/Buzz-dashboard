@@ -1,4 +1,5 @@
-import type { HistoryEvent } from "./history-schema";
+import type { HistoryEvent, NewHistoryEvent } from "./history-schema";
+import type { FeedItem } from "./hive";
 
 // The Timeline view (#41, DESIGN.md → Timeline): history rows turned into
 // feed rows, plus the URL filters. Pure, so the page and the tests share it.
@@ -159,4 +160,52 @@ export function groupByDay(rows: Row[], dayStart: (at: number) => number) {
     else groups.push({ start, rows: [row] });
   }
   return groups;
+}
+
+/**
+ * The live feed without a database (#53): the ingester's GitHub rows and the
+ * relay's feed, as events for toRow. Only those at or after `since` (unix
+ * seconds), newest first. A Buzz event's channel is the name, not the id.
+ */
+export function liveEvents(
+  github: NewHistoryEvent[],
+  feed: FeedItem[],
+  since: number,
+): HistoryEvent[] {
+  const blank = {
+    actor: null,
+    repo: null,
+    channel: null,
+    title: null,
+    url: null,
+    body: null,
+    data: null,
+    ingestedAt: new Date(0),
+  };
+  return [
+    ...github.map((e) => ({ ...blank, ...e })),
+    ...feed.map((m) => ({
+      ...blank,
+      source: "buzz",
+      sourceId: m.id,
+      kind: "message",
+      at: new Date(m.at * 1000),
+      actor: m.author,
+      channel: m.channel,
+      body: m.text,
+    })),
+  ]
+    .filter((e) => e.at.getTime() / 1000 >= since)
+    .sort((a, b) => b.at.getTime() - a.at.getTime());
+}
+
+/** The live feed's two filters, type and agent (`actors`: its names and keys). */
+export function liveMatches(
+  e: HistoryEvent,
+  type: EventType | null,
+  actors: string[] | null,
+): boolean {
+  if (type && !(TYPES[type].kinds as readonly string[]).includes(e.kind))
+    return false;
+  return !actors || (e.actor !== null && actors.includes(e.actor));
 }

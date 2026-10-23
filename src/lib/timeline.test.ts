@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { HistoryEvent } from "./history-schema";
 import {
   groupByDay,
+  liveEvents,
+  liveMatches,
   type Names,
   parseFilters,
   snippet,
@@ -147,5 +149,62 @@ describe("groupByDay", () => {
       [10, 2],
       [0, 1],
     ]);
+  });
+});
+
+describe("liveEvents", () => {
+  const since = Date.parse("2026-10-22T00:00:00Z") / 1000;
+  const github = [
+    {
+      source: "github",
+      sourceId: "o/example-app#42:opened",
+      kind: "pr_opened",
+      at: new Date("2026-10-22T15:00:00Z"),
+      actor: "Fern",
+      repo: "o/example-app",
+      data: { number: 42 },
+    },
+    {
+      source: "github",
+      sourceId: "o/example-app#41:opened",
+      kind: "pr_opened",
+      at: new Date("2026-10-21T15:00:00Z"),
+    },
+  ];
+  const feed = [
+    {
+      id: "m1",
+      at: Date.parse("2026-10-22T16:00:00Z") / 1000,
+      author: "Fern",
+      isAgent: true,
+      channel: "example-app",
+      text: "PR up",
+    },
+  ];
+
+  it("keeps today's events, newest first, with nulls filled in", () => {
+    const events = liveEvents(github, feed, since);
+    expect(events.map((e) => e.sourceId)).toEqual([
+      "m1",
+      "o/example-app#42:opened",
+    ]);
+    expect(events[0]).toMatchObject({
+      source: "buzz",
+      kind: "message",
+      actor: "Fern",
+      channel: "example-app",
+      body: "PR up",
+      url: null,
+    });
+    expect(events[1].title).toBeNull();
+  });
+
+  it("filters by type and by any of the agent's names and keys", () => {
+    const [message, pr] = liveEvents(github, feed, since);
+    expect(liveMatches(pr, "prs", null)).toBe(true);
+    expect(liveMatches(message, "prs", null)).toBe(false);
+    expect(liveMatches(message, null, ["Fern", "ab".repeat(32)])).toBe(true);
+    expect(liveMatches(message, null, ["Gale"])).toBe(false);
+    expect(liveMatches(message, "messages", ["Fern"])).toBe(true);
   });
 });
