@@ -22,7 +22,6 @@ import {
   type NewHistoryEvent,
 } from "./history-schema";
 import { getHive, queryAll } from "./hive";
-import { npubEncode } from "./npub";
 import type { NostrEvent } from "./relay";
 import { sampleMode } from "./sample-data";
 import {
@@ -31,6 +30,7 @@ import {
   isTurnFor,
   openSigner,
   REQUEST_MS,
+  SignerError,
   type SignerRecord,
   TURN_KIND,
   turnEvent,
@@ -183,6 +183,24 @@ export async function ingestOnce(now = new Date()) {
 const MAX_TURNS = 400;
 /** Decrypt requests in flight at once. */
 const PARALLEL = 20;
+/** A report that keeps failing to decrypt is dropped after this many passes. */
+const MAX_TRIES = 3;
+// Report ids that stored nothing, so a pass doesn't re-decrypt them forever.
+// ponytail: in memory, so a restart tries each once more.
+const failures = new Map<string, number>();
+
+/** Oldest first, so a capped pass leaves only newer turns for the next. */
+export function pickFresh(
+  turns: NostrEvent[],
+  stored: Set<string>,
+  tries: Map<string, number>,
+  max = MAX_TURNS,
+): NostrEvent[] {
+  return turns
+    .filter((e) => !stored.has(e.id) && (tries.get(e.id) ?? 0) < MAX_TRIES)
+    .sort((a, b) => a.created_at - b.created_at)
+    .slice(0, max);
+}
 
 /**
  * One owner-signer pass (#43): reads new turn reports from the Buzz relay as
@@ -197,6 +215,14 @@ export async function ingestTurns(record: SignerRecord): Promise<number> {
     record.since,
     newest ? Math.floor(newest.getTime() / 1000) - OVERLAP_S : 0,
   );
+  // Only hive agents' reports are decrypted: anyone who can publish to the
+  // relay could otherwise make the owner's signer prompt a minute. A hive that
+  // can't be read ends the pass rather than widening it.
+  const names = new Map<string, string>();
+  for (const a of (await getHive()).agents) {
+    for (const pk of a.pubkeys) names.set(pk, a.name);
+  }
+  if (!names.size) return 0;
   const s = openSigner(Uint8Array.from(Buffer.from(record.clientKey, "hex")), {
     ...record.bunker,
     secret: null,
@@ -206,7 +232,12 @@ export async function ingestTurns(record: SignerRecord): Promise<number> {
     // pass, the newest; a first backfill on a busy hive keeps only those.
     const found = await queryAll(
       env,
-      { kinds: [TURN_KIND], "#p": [record.pubkey], since },
+      {
+        kinds: [TURN_KIND],
+        "#p": [record.pubkey],
+        authors: [...names.keys()],
+        since,
+      },
       REQUEST_MS * 2,
       (challenge) =>
         withTimeout(
@@ -214,28 +245,21 @@ export async function ingestTurns(record: SignerRecord): Promise<number> {
           REQUEST_MS,
         ),
     );
-    const turns = found.filter((e) => isTurnFor(e, record.pubkey));
+    const turns = found.filter(
+      (e) => names.has(e.pubkey) && isTurnFor(e, record.pubkey),
+    );
     const ids = turns.map((e) => e.id);
     // A turn with no usage stores no cost rows, only its Health row (#44).
     const [known, health] = await Promise.all([
       knownSeries(ids),
       knownAgentEvents(ids),
     ]);
-    // Oldest first, so a capped pass leaves only newer turns for the next.
-    const fresh = turns
-      .filter((e) => !known.has(e.id) && !health.has(e.id))
-      .sort((a, b) => a.created_at - b.created_at)
-      .slice(0, MAX_TURNS);
+    // Ids the relay no longer returns can't come back, so forget them.
+    const live = new Set(ids);
+    for (const id of failures.keys()) if (!live.has(id)) failures.delete(id);
+    const fresh = pickFresh(turns, new Set([...known, ...health]), failures);
     if (!fresh.length) return 0;
 
-    const names = new Map<string, string>();
-    try {
-      for (const a of (await getHive()).agents) {
-        for (const pk of a.pubkeys) names.set(pk, a.name);
-      }
-    } catch {
-      // Unnamed agents fall back to their npub.
-    }
     let stored = 0;
     for (let i = 0; i < fresh.length; i += PARALLEL) {
       const rows: NewCostPoint[] = [];
@@ -248,12 +272,20 @@ export async function ingestTurns(record: SignerRecord): Promise<number> {
       );
       batch.forEach((e, j) => {
         const p = plain[j];
-        // A report that fails to decrypt or parse is skipped, as NIP-AM says.
-        if (p.status !== "fulfilled") return;
-        const agent = names.get(e.pubkey) ?? npubEncode(e.pubkey);
+        // A report that fails to decrypt or parse is skipped, as NIP-AM says,
+        // and given up on once it keeps failing. A signer that didn't answer
+        // in time says nothing about the report, so that isn't counted.
+        if (p.status !== "fulfilled") {
+          if (!(p.reason instanceof SignerError)) {
+            failures.set(e.id, (failures.get(e.id) ?? 0) + 1);
+          }
+          return;
+        }
+        const agent = names.get(e.pubkey) ?? "";
         const r = turnRows(e, p.value, agent);
         const t = turnEvent(e, p.value, agent);
         if (r.length || t) stored++;
+        else failures.set(e.id, MAX_TRIES);
         rows.push(...r);
         if (t) turnEvents.push(t);
       });

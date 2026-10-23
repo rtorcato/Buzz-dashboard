@@ -122,6 +122,20 @@ describe("turnRows", () => {
     expect(rows.map((r) => [r.type, r.value])).toEqual([["output", 5]]);
   });
 
+  it("cuts the stored free text to 128 characters", () => {
+    const rows = turnRows(
+      e,
+      JSON.stringify({
+        ...payload,
+        model: "m".repeat(500),
+        channelId: "c".repeat(500),
+      }),
+      "J",
+    );
+    expect(rows[0].model).toHaveLength(128);
+    expect(rows[0].channel).toHaveLength(128);
+  });
+
   it("skips unreliable deltas and anything that doesn't parse", () => {
     expect(
       turnRows(e, JSON.stringify({ ...payload, deltaReliable: false }), "J"),
