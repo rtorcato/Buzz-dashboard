@@ -4,7 +4,7 @@ import type { NostrEvent } from "./relay";
 
 vi.mock("server-only", () => ({}));
 
-const { buzzRows, githubRows } = await import("./ingest");
+const { buzzRows, githubRows, pickFresh } = await import("./ingest");
 const { retentionDays } = await import("./history");
 
 const item = (over: Partial<GitHubItem> = {}): GitHubItem => ({
@@ -90,5 +90,35 @@ describe("retentionDays", () => {
     expect(retentionDays("0")).toBe(90);
     expect(retentionDays("7.5")).toBe(90);
     expect(retentionDays("30")).toBe(30);
+  });
+});
+
+describe("pickFresh", () => {
+  const ev = (id: string, created_at: number): NostrEvent => ({
+    id,
+    kind: 44200,
+    pubkey: "ab".repeat(32),
+    created_at,
+    tags: [],
+    content: "",
+    sig: "",
+  });
+
+  it("skips stored and given-up reports, oldest first, up to the cap", () => {
+    const turns = [ev("c", 3), ev("a", 1), ev("stored", 0), ev("bad", 2)];
+    const tries = new Map([["bad", 3]]);
+    expect(
+      pickFresh(turns, new Set(["stored"]), tries).map((e) => e.id),
+    ).toEqual(["a", "c"]);
+    expect(pickFresh(turns, new Set(), new Map(), 2).map((e) => e.id)).toEqual([
+      "stored",
+      "a",
+    ]);
+  });
+
+  it("retries a report that has failed fewer than three times", () => {
+    expect(
+      pickFresh([ev("x", 1)], new Set(), new Map([["x", 2]])),
+    ).toHaveLength(1);
   });
 });

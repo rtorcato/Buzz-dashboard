@@ -139,9 +139,14 @@ export function isTurnFor(e: NostrEvent, owner: string): boolean {
 }
 
 const count = z.number().nonnegative().nullish();
+// Free text from a report is stored, so it's cut to a sane length.
+const label = z
+  .string()
+  .transform((v) => v.slice(0, 128))
+  .nullish();
 const TurnSchema = z.object({
-  model: z.string().nullish(),
-  channelId: z.string().nullish(),
+  model: label,
+  channelId: label,
   timestamp: z.string(),
   deltaReliable: z.boolean().optional(),
   stopReason: z.string().nullish(),
