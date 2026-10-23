@@ -25,6 +25,8 @@
   --color-chart-1: var(--chart-1);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-mark: var(--mark);
+  --color-mark-foreground: var(--mark-foreground);
   --color-info: var(--info);
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -74,6 +76,9 @@
    * with an icon and a label, never color alone. See DESIGN.md. */
   --success: oklch(0.527 0.154 150.069);
   --warning: oklch(0.555 0.163 48.998);
+  /* DESIGN.md → Tokens: search match and the Buzz badge, 15.9:1. */
+  --mark: #fde68a;
+  --mark-foreground: #0a0a0a;
   --info: oklch(0.546 0.245 262.881);
   /* chart-1 = PRs opened, chart-2 = PRs merged, chart-3 = neutral activity. */
   --chart-1: #2a78d6;
@@ -113,6 +118,9 @@
   --ring: oklch(0.556 0 0);
   --success: oklch(0.792 0.209 151.711);
   --warning: oklch(0.828 0.189 84.429);
+  /* 8.3:1. */
+  --mark: #5c4a00;
+  --mark-foreground: #fafafa;
   --info: oklch(0.707 0.165 254.624);
   --chart-1: #3987e5;
   --chart-2: #d95926;

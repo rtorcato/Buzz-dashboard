@@ -96,7 +96,7 @@ export function sampleHive(): Hive {
     })),
     formerNames: [],
   }));
-  return { agents, feed: [], hourly: Array(24).fill(0) };
+  return { agents, feed: [], hourly: Array(24).fill(0), channels: {} };
 }
 
 /** 30 days of messages per day, oldest first, for the agent page. */
