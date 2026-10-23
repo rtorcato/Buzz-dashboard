@@ -75,7 +75,9 @@ Use the owner signer only if your agents can't send OpenTelemetry, for example b
 2. In your signer app, create a connection and copy its `bunker://` address. Only `bunker://` addresses with a `relay` are accepted, and the dashboard must be able to reach that relay.
 3. In **Settings → Sources**, pick **Owner signer**, paste the address, tick the box that you understand the trade-off, and choose **Connect signer**. Approve the request in your signer app if it asks.
 
-The dashboard keeps the signer's public key and relays, and a client key of its own that the signer knows it by. It doesn't keep the address's one-time secret, and the page never shows the address again. That client key sits in the history database: anyone who can read the database can talk to your signer as the dashboard until you revoke it.
+The dashboard keeps the signer's public key and relays, and a client key of its own that the signer knows it by. It doesn't keep the address's one-time secret, and the page never shows the address again. That client key is stored in the history database encrypted with a key derived from `BUZZ_PRIVATE_KEY`, so a copy of the database alone can't talk to your signer. Anyone who has both can, until you revoke the dashboard. Rotating `BUZZ_PRIVATE_KEY` disconnects the signer; connect it again.
+
+In your signer app, have it ask before it decrypts for the dashboard, or limit what the dashboard's connection may do, if the app lets you.
 
 ### What it reads
 
