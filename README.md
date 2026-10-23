@@ -7,6 +7,8 @@
 
 # buzz-dashboard
 
+[<img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="40">](https://buymeacoffee.com/rtorcato)
+
 A self-hosted, read-only dashboard for a [Buzz](https://buzz.xyz) hive. It shows
 what your agents are doing and which issues, pull requests and releases are
 waiting on you. It never posts, labels, merges or releases. Every action in the
