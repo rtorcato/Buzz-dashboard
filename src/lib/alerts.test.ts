@@ -6,6 +6,8 @@ import {
   dueAlerts,
   elide,
   type Item,
+  liveMutes,
+  rowMute,
 } from "./alerts";
 
 const H = 3_600_000;
@@ -135,6 +137,43 @@ describe("alertRequest", () => {
       title: "Gale’s failing",
       detail: "6 of 14",
       url: "https://hive.example/health",
+    });
+  });
+});
+
+describe("snooze and ack", () => {
+  it("holds a snoozed item until the snooze runs out", () => {
+    const mutes = { "failing:Gale": { until: NOON + H } };
+    expect(dueAlerts(config(), {}, [failing], NOON, mutes).due).toEqual([]);
+    const later = dueAlerts(config(), {}, [failing], NOON + H, mutes);
+    expect(later.due.map((d) => d.item.key)).toEqual(["failing:Gale"]);
+  });
+
+  it("still alerts on a new item while the others are acked", () => {
+    const mutes = { "merge:o/r#1": { until: null } };
+    const two = { ...merge, key: "merge:o/r#2" };
+    const prev = { [two.key]: { first: NOON, sent: null } };
+    const out = dueAlerts(config(), prev, [merge, two], NOON + 3 * H, mutes);
+    expect(out.due.map((d) => d.item.key)).toEqual(["merge:o/r#2"]);
+  });
+
+  it("drops an ack once its item clears, and keeps acks if a source is down", () => {
+    const mutes = {
+      "merge:o/r#1": { until: null },
+      "failing:Gale": { until: NOON - 1 },
+    };
+    expect(liveMutes(mutes, ["failing:Gale"], NOON)).toEqual({});
+    expect(liveMutes(mutes, null, NOON)).toEqual({
+      "merge:o/r#1": { until: null },
+    });
+  });
+
+  it("marks a row only when every item in it is muted", () => {
+    const mutes = { a: { until: NOON + 2 * H }, b: { until: NOON + H } };
+    expect(rowMute(["a", "b"], mutes, NOON)).toEqual({ until: NOON + H });
+    expect(rowMute(["a", "c"], mutes, NOON)).toBeNull();
+    expect(rowMute(["c"], { c: { until: null } }, NOON)).toEqual({
+      until: null,
     });
   });
 });

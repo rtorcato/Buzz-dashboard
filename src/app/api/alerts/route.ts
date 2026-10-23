@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   AlertInputError,
   addChannel,
+  muteItems,
   removeChannel,
   saveRule,
   sendTest,
@@ -12,7 +13,8 @@ import { CHANNEL_TYPES, RULE_IDS, RuleSchema } from "@/lib/alerts";
 import { OwnerRequired, requireOwner } from "@/lib/auth";
 import { historyEnabled } from "@/lib/history";
 
-// Changes the alert channels and rules (#45), and sends a test. Owner only.
+// Changes the alert channels and rules (#45), sends a test, and snoozes or
+// acks Needs you items (#46). Owner only.
 // A channel's URL comes in once and never goes back out.
 
 const BodySchema = z.discriminatedUnion("op", [
@@ -30,6 +32,11 @@ const BodySchema = z.discriminatedUnion("op", [
     value: RuleSchema,
   }),
   z.object({ op: z.literal("quiet"), on: z.boolean() }),
+  z.object({
+    op: z.literal("mute"),
+    keys: z.array(z.string().max(300)).min(1).max(100),
+    until: z.number().int().nullable(),
+  }),
 ]);
 
 export async function POST(request: Request) {
@@ -61,6 +68,7 @@ export async function POST(request: Request) {
     else if (b.op === "remove") await removeChannel(b.id);
     else if (b.op === "rule") await saveRule(b.rule, b.value);
     else if (b.op === "quiet") await setQuiet(b.on);
+    else if (b.op === "mute") await muteItems(b.keys, b.until);
     else await sendTest(b.id);
   } catch (err) {
     if (err instanceof AlertInputError) {

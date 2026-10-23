@@ -12,6 +12,10 @@ import {
   dueAlerts,
   EMPTY_CONFIG,
   type Item,
+  liveMutes,
+  MAX_SNOOZE_MS,
+  type Mutes,
+  MutesSchema,
   RULE_IDS,
   type Rule,
   type RuleId,
@@ -22,13 +26,20 @@ import { loadIngestTokenRecord, loadSignerRecord } from "./cost-source";
 import { readGitHub } from "./github";
 import { loadFailing } from "./health-data";
 import { getSetting, historyEnabled, setSetting } from "./history";
-import { excludedLabels, failingRow, MERGE_READY } from "./needs-you";
+import {
+  excludedLabels,
+  failingKey,
+  failingRow,
+  MERGE_READY,
+  mergeKey,
+} from "./needs-you";
 
 // Alerts (#45), server side: the stored config with its channel URLs
 // encrypted, the sender, and the pass the ingester runs every minute.
 
 const CONFIG_KEY = "alerts";
 const STATE_KEY = "alert_state";
+const MUTE_KEY = "alert_mute";
 const SEND_MS = 10_000;
 
 /** The config with channel URLs decrypted. Server only: never send it to the page. */
@@ -129,6 +140,27 @@ export async function setQuiet(quiet: boolean) {
   await saveAlerts({ ...(await loadAlerts()), quiet });
 }
 
+/** Snoozed and acked alert items (#46); empty without the history store. */
+export async function loadMutes(): Promise<Mutes> {
+  if (!historyEnabled()) return {};
+  const parsed = MutesSchema.safeParse(await getSetting(MUTE_KEY));
+  return parsed.success ? parsed.data : {};
+}
+
+/** Stops alerts on `keys` until `until` (ms), or until each clears when null. */
+export async function muteItems(
+  keys: string[],
+  until: number | null,
+  now = Date.now(),
+) {
+  if (until !== null && (until <= now || until > now + MAX_SNOOZE_MS)) {
+    throw new AlertInputError("Snooze for up to two days");
+  }
+  const mutes = await loadMutes();
+  for (const key of keys) mutes[key] = { until };
+  await setSetting(MUTE_KEY, mutes);
+}
+
 /** Posts one alert to one channel; throws when it doesn't land. */
 export async function deliver(
   channel: Channel,
@@ -169,9 +201,15 @@ export async function sendTest(id: string) {
   });
 }
 
-/** What Needs you shows right now that a rule can alert on. */
-async function currentItems(now: number): Promise<Item[]> {
+/**
+ * What Needs you shows right now that a rule can alert on. `complete` is
+ * false when GitHub didn't answer, so some items may be missing.
+ */
+async function currentItems(
+  now: number,
+): Promise<{ items: Item[]; complete: boolean }> {
   const items: Item[] = [];
+  let complete = true;
   const source = (await loadSignerRecord())
     ? "signer"
     : (await loadIngestTokenRecord())
@@ -183,7 +221,7 @@ async function currentItems(now: number): Promise<Item[]> {
       const row = failingRow(f, source);
       items.push({
         rule: "failing",
-        key: `failing:${f.agent}`,
+        key: failingKey(f.agent),
         title: row.title,
         detail: row.detail,
         path: "/health",
@@ -192,31 +230,45 @@ async function currentItems(now: number): Promise<Item[]> {
   }
   if (!excludedLabels(process.env.NEEDS_YOU_EXCLUDE_LABELS).has(MERGE_READY)) {
     const { github } = await readGitHub();
+    if (!github) complete = false;
     for (const pr of github?.prs ?? []) {
       if (pr.closedAt !== null || !pr.labels.includes(MERGE_READY)) continue;
       const key = `${pr.repo.split("/")[1]}#${pr.number}`;
       items.push({
         rule: "merge",
-        key: `merge:${pr.repo}#${pr.number}`,
+        key: mergeKey(pr),
         title: `${key} is ready to merge`,
         detail: pr.title,
         path: "/pipeline",
       });
     }
   }
-  return items;
+  return { items, complete };
 }
 
 /** One alerts pass: sends what is due and remembers what went out. */
 export async function runAlerts(now = Date.now()) {
   const config = await loadAlerts();
-  if (!config.channels.some((c) => c.on)) return;
+  const on = config.channels.some((c) => c.on);
+  // Acks still have to drop when their item clears, channels or not.
+  if (!on && !Object.keys(await loadMutes()).length) return;
+  const { items, complete } = await currentItems(now);
+  // Read the mutes again after the slow GitHub read, so a snooze saved
+  // meanwhile isn't overwritten.
+  const mutes = liveMutes(
+    await loadMutes(),
+    complete ? items.map((i) => i.key) : null,
+    now,
+  );
+  await setSetting(MUTE_KEY, mutes);
+  if (!on) return;
   const prev = AlertStateSchema.safeParse(await getSetting(STATE_KEY));
   const { due, state } = dueAlerts(
     config,
     prev.success ? prev.data : {},
-    await currentItems(now),
+    items,
     now,
+    mutes,
   );
   for (const { item, channels } of due) {
     const sent = await Promise.allSettled(

@@ -93,7 +93,7 @@ const typeItems = Object.entries(CHANNEL).map(([value, c]) => ({
 }));
 
 /** POSTs one change; returns an error line, or null once it saved. */
-async function post(body: object): Promise<string | null> {
+export async function post(body: object): Promise<string | null> {
   try {
     const res = await fetch("/api/alerts", {
       method: "POST",

@@ -34,3 +34,12 @@ The last four rules can already be set, but they won't fire until Needs you read
 **Quiet hours** hold every alert except failing agents from 10 PM to 8 AM, on the server's clock. Set `TZ` (for example `TZ=America/Toronto`) so that matches yours. Held alerts go out once quiet hours end, if the item is still there.
 
 The dashboard checks the rules once a minute.
+
+## Snooze and acknowledge
+
+Signed in as the owner, each Needs you row that can alert has two buttons that open a "Stop alerting me about this" menu:
+
+- **For 1 hour**, or **Until tomorrow** (9:00 AM): alerts on that row stop on every channel until then.
+- **Until it changes** (ack): alerts stop until the item clears. If it comes back later, it alerts again.
+
+The row stays on the page, dimmed. A new item in the same row, such as one more PR ready to merge, still alerts, so a snooze never hides something that got worse. Snoozes are kept in the history database, like the rest of Alerts.

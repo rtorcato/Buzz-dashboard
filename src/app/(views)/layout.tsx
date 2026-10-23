@@ -11,6 +11,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { loadMutes } from "@/lib/alert-store";
 import { authMode, getOwner } from "@/lib/auth";
 import { costConnected } from "@/lib/cost-source";
 import { costSince, historyEnabled } from "@/lib/history";
@@ -22,11 +23,12 @@ export default async function ViewsLayout({
 }: {
   children: ReactNode;
 }) {
-  const [needsYou, costToday, jar, owner] = await Promise.all([
+  const [needsYou, costToday, jar, owner, mutes] = await Promise.all([
     getNeedsYou(),
     readCostToday(),
     cookies(),
     getOwner(),
+    readMutes(),
   ]);
   const mode = authMode();
   const now = Date.now();
@@ -62,7 +64,17 @@ export default async function ViewsLayout({
             </div>
           </header>
           <main className="mx-auto w-full max-w-[1400px] flex-1 space-y-6 px-4 py-6 sm:px-6">
-            <NeedsYouCard data={needsYou} now={now} />
+            <NeedsYouCard
+              data={needsYou}
+              now={now}
+              snooze={
+                mutes && {
+                  mutes,
+                  canEdit: owner !== null,
+                  signIn: mode !== null,
+                }
+              }
+            />
             {needsYou.failures.map((f) => (
               <SourceDown key={f.source} source={f.source}>
                 {f.detail}
@@ -86,6 +98,18 @@ async function readCostToday(): Promise<number | null> {
     return await costSince(today);
   } catch (err) {
     console.error("Cost chip:", err);
+    return null;
+  }
+}
+
+// Snoozed and acked Needs you items (#46): null, so no snooze, without the
+// history store or while it's down.
+async function readMutes() {
+  if (!historyEnabled()) return null;
+  try {
+    return await loadMutes();
+  } catch (err) {
+    console.error("Needs you, snooze:", err);
     return null;
   }
 }

@@ -48,7 +48,15 @@ export type NeedsYouRow = {
   since: string;
   // Unix seconds the item clears by itself (a usage pause), shown as a countdown.
   resetsAt?: number | null;
+  // The alert items (#45) the row covers, so snooze and ack (#46) can mute
+  // them. Absent on rows no alert rule reads.
+  keys?: string[];
 };
+
+// Alert item keys, shared by the rows and the alerts pass.
+export const failingKey = (agent: string) => `failing:${agent}`;
+export const mergeKey = (pr: { repo: string; number: number }) =>
+  `merge:${pr.repo}#${pr.number}`;
 
 // A source the dashboard can't read, shown as a destructive Alert.
 export type SourceFailure = { source: string; detail: string };
@@ -140,6 +148,7 @@ export function mergeRow(github: GitHub) {
     detail: prs.map((p) => `${p.repo.split("/")[1]}#${p.number}`).join(", "),
     count: prs.length,
     since: new Date(oldest * 1000).toISOString(),
+    keys: prs.map(mergeKey),
   } satisfies NeedsYouRow;
 }
 
@@ -159,6 +168,7 @@ export function failingRow(f: FailingAgent, source: HealthSource) {
         : `${errors} of ${attempts} API requests failed in the last hour`,
     count: 1,
     since: new Date(f.since * 1000).toISOString(),
+    keys: [failingKey(f.agent)],
   } satisfies NeedsYouRow;
 }
 

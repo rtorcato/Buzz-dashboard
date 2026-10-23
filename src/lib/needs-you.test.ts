@@ -148,6 +148,7 @@ describe("mergeRow", () => {
       detail: "js-common#2, db-common#7",
       count: 2,
       since: "2026-10-15T00:00:00.000Z",
+      keys: ["merge:rtorcato/js-common#2", "merge:rtorcato/db-common#7"],
     });
   });
   it("is absent with none", () => {
@@ -321,6 +322,7 @@ describe("failingRow", () => {
       detail: "6 of 14 turns ended in error in the last hour",
       count: 1,
       since: "2026-10-16T19:08:00.000Z",
+      keys: ["failing:Gale"],
     });
   });
 
