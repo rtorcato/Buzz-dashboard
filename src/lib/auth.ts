@@ -16,7 +16,8 @@ import { readServerEnv } from "./env";
 //
 // AUTH_MODE picks how the owner proves who they are:
 // - "nostr": a NIP-07 browser extension signs a one-time challenge (a NIP-98
-//   shaped event, kind 27235). Allowed keys are BUZZ_OWNER_PUBKEY.
+//   shaped event, kind 27235) for AUTH_PUBLIC_URL. Allowed keys are
+//   BUZZ_OWNER_PUBKEY.
 // - "proxy": a reverse proxy that already authenticates (Authentik forward
 //   auth, for example) names the user in AUTH_PROXY_HEADER. The header only
 //   counts when the request also carries the proxy's shared secret, so a
@@ -43,12 +44,30 @@ const MAX_SKEW_S = 60;
 
 /** The configured mode, or null when sign-in is off or incomplete. */
 export function authMode(env: Env = process.env): AuthMode | null {
-  if (env.AUTH_MODE === "nostr") return "nostr";
+  // Without a pinned origin a login event could be bound to whatever host the
+  // request claims (#63).
+  if (env.AUTH_MODE === "nostr") return publicOrigin(env) ? "nostr" : null;
   if (env.AUTH_MODE === "proxy") {
     // Both are needed, or anyone could send the header.
     return env.AUTH_PROXY_HEADER && env.AUTH_PROXY_SECRET ? "proxy" : null;
   }
   return null;
+}
+
+/**
+ * AUTH_PUBLIC_URL's origin (scheme, host and port), or null if it isn't an
+ * http(s) URL. Login events must name it, and cookies are Secure unless it is
+ * plain http. Never taken from request headers, which the client controls.
+ */
+export function publicOrigin(env: Env = process.env): string | null {
+  try {
+    const url = new URL(env.AUTH_PUBLIC_URL ?? "");
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.origin
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 const b64 = (b: Buffer) => b.toString("base64url");
@@ -132,17 +151,17 @@ const tag = (tags: string[][], name: string) =>
 
 /**
  * Checks a signed login event against the challenge it must answer. Returns
- * the signer's pubkey, or why it was refused. `host` is the host the browser
- * used, so an event signed for another site doesn't log in here.
+ * the signer's pubkey, or why it was refused. `origin` is the configured
+ * public origin, so an event signed for another site doesn't log in here.
  */
 export function verifyLogin(
   raw: unknown,
   {
     challenge,
-    host,
+    origin,
     owners,
     now,
-  }: { challenge: string; host: string; owners: string[]; now: number },
+  }: { challenge: string; origin: string; owners: string[]; now: number },
 ): { pubkey: string } | { error: string } {
   const parsed = EventSchema.safeParse(raw);
   if (!parsed.success) return { error: "malformed event" };
@@ -162,7 +181,7 @@ export function verifyLogin(
   } catch {
     return { error: "wrong url" };
   }
-  if (url.host !== host || url.pathname !== LOGIN_PATH) {
+  if (url.origin !== origin || url.pathname !== LOGIN_PATH) {
     return { error: "wrong url" };
   }
   const id = createHash("sha256")

@@ -25,6 +25,7 @@ Without `BUZZ_RELAY_URL` and `BUZZ_PRIVATE_KEY` the relay-backed views show a "C
 | Variable | Purpose |
 |---|---|
 | `AUTH_MODE` | `nostr` or `proxy`. Unset, sign-in is off and nothing can write. |
+| `AUTH_PUBLIC_URL` | Nostr mode, required: the URL you open the dashboard at, e.g. `https://hive.example.com`. Login events must be signed for this origin, and cookies are `Secure` unless it is `http://`. Without it, Nostr sign-in stays off. |
 | `AUTH_PROXY_HEADER` | Proxy mode: the request header your proxy names the user in, e.g. `X-authentik-username`. |
 | `AUTH_PROXY_SECRET` | Proxy mode: a shared secret the proxy sends as `X-Buzz-Proxy-Secret`. The user header only counts with it. |
 | `AUTH_PROXY_USERS` | Proxy mode: comma list of users who are the owner. Unset, anyone the proxy lets through is. |

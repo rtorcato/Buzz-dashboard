@@ -173,7 +173,9 @@ export async function SourcesTab({
               )}
             </>
           )}
-          {!owner && !mode && " · owner sign-in is off (set AUTH_MODE)"}
+          {!owner &&
+            !mode &&
+            " · owner sign-in is off (set AUTH_MODE, and AUTH_PUBLIC_URL for nostr)"}
         </p>
         {!owner && mode === "nostr" && <SignInButton />}
       </div>

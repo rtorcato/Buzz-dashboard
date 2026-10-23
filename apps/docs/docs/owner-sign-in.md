@@ -13,10 +13,13 @@ Sign-in is off until you set `AUTH_MODE`. It has two modes.
 
 ## Nostr extension (`AUTH_MODE=nostr`)
 
-"Sign in with Nostr" in the sidebar asks your NIP-07 browser extension (Alby, nos2x and the like) to sign a one-time challenge. Your key never leaves the extension. The dashboard checks the signature, that the challenge is fresh and for this site, and that the key is one of `BUZZ_OWNER_PUBKEY`.
+"Sign in with Nostr" in the sidebar asks your NIP-07 browser extension (Alby, nos2x and the like) to sign a one-time challenge. Your key never leaves the extension. The dashboard checks the signature, that the challenge is fresh and signed for `AUTH_PUBLIC_URL`, and that the key is one of `BUZZ_OWNER_PUBKEY`.
+
+`AUTH_PUBLIC_URL` is required in this mode: set it to the exact URL you open the dashboard at, scheme and port included. The dashboard never trusts the request's `Host` or `X-Forwarded-Host` for this, because a client can set them. Opening it at any other address (another hostname, or plain `http://` when the URL is `https://`) fails with "Open the dashboard at its AUTH_PUBLIC_URL".
 
 ```sh
 AUTH_MODE=nostr
+AUTH_PUBLIC_URL=https://hive.example.com
 # Your hex pubkey. A comma list lets more than one key sign in; the first
 # one is still the owner whose attestations mark agents.
 BUZZ_OWNER_PUBKEY=<owner-hex>

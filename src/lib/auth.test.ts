@@ -14,6 +14,7 @@ const {
   newSession,
   PROXY_SECRET_HEADER,
   proxyUser,
+  publicOrigin,
   seal,
   unseal,
   verifyLogin,
@@ -46,7 +47,7 @@ function signed(over: { tags?: string[][]; kind?: number; at?: number } = {}) {
 
 const opts = {
   challenge: "c".repeat(64),
-  host: "hive.example",
+  origin: "https://hive.example",
   owners: [pubkey],
   now: NOW,
 };
@@ -54,7 +55,14 @@ const opts = {
 describe("authMode", () => {
   it("is off unless configured completely", () => {
     expect(authMode({})).toBeNull();
-    expect(authMode({ AUTH_MODE: "nostr" })).toBe("nostr");
+    // Nostr sign-in needs a pinned origin (#63).
+    expect(authMode({ AUTH_MODE: "nostr" })).toBeNull();
+    expect(
+      authMode({ AUTH_MODE: "nostr", AUTH_PUBLIC_URL: "hive.example" }),
+    ).toBeNull();
+    expect(
+      authMode({ AUTH_MODE: "nostr", AUTH_PUBLIC_URL: "https://hive.example" }),
+    ).toBe("nostr");
     expect(authMode({ AUTH_MODE: "proxy", AUTH_PROXY_HEADER: "x-user" })).toBe(
       null,
     );
@@ -65,6 +73,17 @@ describe("authMode", () => {
         AUTH_PROXY_SECRET: "s",
       }),
     ).toBe("proxy");
+  });
+});
+
+describe("publicOrigin", () => {
+  it("keeps scheme, host and port of an http(s) URL only", () => {
+    const o = (url?: string) => publicOrigin({ AUTH_PUBLIC_URL: url });
+    expect(o("https://hive.example/some/path")).toBe("https://hive.example");
+    expect(o("http://10.0.0.5:3000")).toBe("http://10.0.0.5:3000");
+    expect(o("ftp://hive.example")).toBeNull();
+    expect(o("hive.example")).toBeNull();
+    expect(o(undefined)).toBeNull();
   });
 });
 
@@ -129,6 +148,14 @@ describe("verifyLogin", () => {
         "wrong url",
       ],
       [signed({ tags: tags("https://hive.example/other") }), "wrong url"],
+      [
+        signed({ tags: tags("http://hive.example/api/auth/login") }),
+        "wrong url",
+      ],
+      [
+        signed({ tags: tags("https://hive.example:8443/api/auth/login") }),
+        "wrong url",
+      ],
       [{ ...signed(), content: "x" }, "bad id"],
       [{ ...signed(), sig: signed({ at: NOW - 1 }).sig }, "bad signature"],
     ];

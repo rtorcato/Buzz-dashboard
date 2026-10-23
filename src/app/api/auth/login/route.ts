@@ -5,15 +5,19 @@ import {
   cookieChallenge,
   newSession,
   ownerPubkeys,
+  publicOrigin,
   SESSION_COOKIE,
   verifyLogin,
 } from "@/lib/auth";
-import { cookieOptions, requestHost } from "../cookie";
+import { cookieOptions } from "../cookie";
 
 // Step 2 of Nostr sign-in (#40): the signed challenge in, a session cookie
 // out. The challenge cookie is single-use: it is cleared whatever happens.
 export async function POST(request: Request) {
-  if (authMode() !== "nostr") return new Response(null, { status: 404 });
+  const origin = publicOrigin();
+  if (authMode() !== "nostr" || !origin) {
+    return new Response(null, { status: 404 });
+  }
   // A JSON body makes a cross-site form post impossible without a CORS
   // preflight, which this route never answers.
   if (!request.headers.get("content-type")?.startsWith("application/json")) {
@@ -34,7 +38,7 @@ export async function POST(request: Request) {
   }
   const result = verifyLogin(event, {
     challenge,
-    host: requestHost(request),
+    origin,
     owners: ownerPubkeys(),
     now,
   });
@@ -45,6 +49,6 @@ export async function POST(request: Request) {
     );
   }
   const { value, maxAge } = newSession(result.pubkey, now);
-  jar.set(SESSION_COOKIE, value, cookieOptions(request, maxAge));
+  jar.set(SESSION_COOKIE, value, cookieOptions(maxAge));
   return Response.json({ pubkey: result.pubkey });
 }
