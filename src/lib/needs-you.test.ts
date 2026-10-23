@@ -51,6 +51,7 @@ const pr = (over: Partial<GitHubItem>): GitHubItem => ({
   createdAt: T("2026-10-16T12:00:00Z"),
   closedAt: null,
   mergedAt: null,
+  reviews: [],
   ...over,
 });
 const github = (prs: GitHubItem[]): GitHub => ({

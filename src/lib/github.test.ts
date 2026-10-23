@@ -90,6 +90,39 @@ describe("toItem", () => {
     });
   });
 
+  it("keeps submitted reviews and drops pending ones (#47)", () => {
+    expect(
+      toItem(
+        raw({
+          reviews: {
+            nodes: [
+              {
+                state: "CHANGES_REQUESTED",
+                submittedAt: "2026-10-18T11:00:00Z",
+                author: { login: "alice" },
+              },
+              { state: "PENDING", submittedAt: null, author: null },
+              null,
+              {
+                state: "APPROVED",
+                submittedAt: "2026-10-18T11:30:00Z",
+                author: null,
+              },
+            ],
+          },
+        }),
+      ).reviews,
+    ).toEqual([
+      {
+        state: "CHANGES_REQUESTED",
+        at: at("2026-10-18T11:00:00Z"),
+        author: "alice",
+      },
+      { state: "APPROVED", at: at("2026-10-18T11:30:00Z"), author: "ghost" },
+    ]);
+    expect(toItem(raw({ __typename: "Issue" })).reviews).toEqual([]);
+  });
+
   it("ignores a header in a PR from anyone but the bot or the owner (#37)", () => {
     expect(toItem(raw({ author: { login: "mallory" } })).agent).toBeNull();
     expect(toItem(raw({ author: null })).agent).toBeNull();

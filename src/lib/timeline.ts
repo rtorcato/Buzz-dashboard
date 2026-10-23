@@ -7,7 +7,10 @@ import type { FeedItem } from "./hive";
 export const TYPES = {
   messages: { label: "Messages", kinds: ["message"] },
   issues: { label: "Issues", kinds: ["claimed"] },
-  prs: { label: "PRs", kinds: ["pr_opened", "pr_merged", "pr_closed"] },
+  prs: {
+    label: "PRs",
+    kinds: ["pr_opened", "pr_reviewed", "pr_merged", "pr_closed"],
+  },
   // ponytail: the ingester doesn't record label changes or releases yet, so
   // these filters stay empty until it does.
   labels: { label: "Labels", kinds: ["labelled"] },
@@ -107,6 +110,7 @@ export function splitMatches(text: string, q: string): string[] {
 
 const GITHUB: Record<string, [RowIcon, string]> = {
   pr_opened: ["opened", "opened"],
+  pr_reviewed: ["opened", "reviewed"],
   pr_merged: ["merged", "merged"],
   pr_closed: ["closed", "closed"],
   claimed: ["claimed", "claimed"],
