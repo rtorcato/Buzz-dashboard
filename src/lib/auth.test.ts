@@ -111,6 +111,15 @@ describe("verifyLogin", () => {
       ],
       [
         signed({
+          tags: tags(
+            "https://hive.example/api/auth/login",
+            `é${"c".repeat(63)}`,
+          ),
+        }),
+        "wrong challenge",
+      ],
+      [
+        signed({
           tags: tags("https://hive.example/api/auth/login", undefined, "GET"),
         }),
         "wrong method",

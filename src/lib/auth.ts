@@ -149,11 +149,10 @@ export function verifyLogin(
   const e = parsed.data;
   if (e.kind !== LOGIN_KIND) return { error: "wrong kind" };
   if (Math.abs(now - e.created_at) > MAX_SKEW_S) return { error: "expired" };
-  const given = tag(e.tags, "challenge") ?? "";
-  if (
-    given.length !== challenge.length ||
-    !timingSafeEqual(Buffer.from(given), Buffer.from(challenge))
-  ) {
+  // Compare byte lengths: a multibyte tag of equal char length would throw.
+  const given = Buffer.from(tag(e.tags, "challenge") ?? "");
+  const want = Buffer.from(challenge);
+  if (given.length !== want.length || !timingSafeEqual(given, want)) {
     return { error: "wrong challenge" };
   }
   if (tag(e.tags, "method") !== "POST") return { error: "wrong method" };
