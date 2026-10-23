@@ -17,6 +17,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { FLOW_KINDS } from "./flow";
 import { events, type HistoryEvent } from "./history-schema";
 
 // The optional history store (#39). Without DATABASE_URL the dashboard is the
@@ -130,6 +131,29 @@ export function listEvents(q: EventQuery = {}): Promise<HistoryEvent[]> {
     .where(matching(q))
     .orderBy(desc(events.at), desc(events.sourceId))
     .limit(Math.min(Math.max(q.limit ?? 100, 1), 1000));
+}
+
+/**
+ * Every stored PR event since `since`, oldest first, for the Pipeline flow
+ * (#47). Only the columns it reads, and no row limit: a PR needs all of its
+ * events to be measured.
+ */
+export function prEvents(since: Date) {
+  // ponytail: a few thousand rows at 90 days and ~30 PRs a day. Aggregate in
+  // SQL if the store grows past what one page load can sort.
+  return historyDb()
+    .select({
+      kind: events.kind,
+      at: events.at,
+      actor: events.actor,
+      repo: events.repo,
+      title: events.title,
+      url: events.url,
+      data: events.data,
+    })
+    .from(events)
+    .where(matching({ since, source: "github", kinds: [...FLOW_KINDS] }))
+    .orderBy(events.at);
 }
 
 /**

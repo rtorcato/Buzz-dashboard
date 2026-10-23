@@ -19,6 +19,7 @@ const item = (over: Partial<GitHubItem> = {}): GitHubItem => ({
   createdAt: 1_700_000_000,
   closedAt: null,
   mergedAt: null,
+  reviews: [],
   ...over,
 });
 
@@ -26,7 +27,11 @@ describe("githubRows", () => {
   it("keys each PR transition and issue claim on a stable source id", () => {
     const rows = githubRows({
       prs: [
-        item({ mergedAt: 1_700_000_500, closedAt: 1_700_000_500 }),
+        item({
+          mergedAt: 1_700_000_500,
+          closedAt: 1_700_000_500,
+          reviews: [{ state: "APPROVED", at: 1_700_000_300, author: "alice" }],
+        }),
         item({ number: 8, agent: null, closedAt: 1_700_000_900 }),
       ],
       claims: [
@@ -39,12 +44,17 @@ describe("githubRows", () => {
     });
     expect(rows.map((r) => [r.sourceId, r.kind, r.actor])).toEqual([
       ["acme/app#7:opened", "pr_opened", "Shockwave"],
+      ["acme/app#7:reviewed:1700000300:alice", "pr_reviewed", "alice"],
       ["acme/app#7:merged", "pr_merged", "Shockwave"],
       ["acme/app#8:opened", "pr_opened", "acme-bot"],
       ["acme/app#8:closed", "pr_closed", "acme-bot"],
       ["acme/app#3:claimed:1700000100", "claimed", "Shockwave"],
     ]);
-    expect(rows[1].at).toEqual(new Date(1_700_000_500_000));
+    expect(rows[1].data).toMatchObject({
+      state: "APPROVED",
+      author: "acme-bot",
+    });
+    expect(rows[2].at).toEqual(new Date(1_700_000_500_000));
   });
 });
 

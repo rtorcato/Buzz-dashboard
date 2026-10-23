@@ -27,7 +27,7 @@ const BATCH = 1000;
 
 const toDate = (secs: number) => new Date(secs * 1000);
 
-/** PR opened / merged / closed and issue claims, one row each. */
+/** PR opened / reviewed / merged / closed and issue claims, one row each. */
 export function githubRows(github: GitHub): NewHistoryEvent[] {
   const rows: NewHistoryEvent[] = [];
   for (const pr of github.prs) {
@@ -46,6 +46,17 @@ export function githubRows(github: GitHub): NewHistoryEvent[] {
       kind: "pr_opened",
       at: toDate(pr.createdAt),
     });
+    // The Pipeline flow (#47) splits a PR's time at its reviews.
+    for (const r of pr.reviews) {
+      rows.push({
+        ...base,
+        sourceId: `${key}:reviewed:${r.at}:${r.author}`,
+        kind: "pr_reviewed",
+        at: toDate(r.at),
+        actor: r.author,
+        data: { ...base.data, state: r.state, reviewer: r.author },
+      });
+    }
     if (pr.mergedAt) {
       rows.push({
         ...base,

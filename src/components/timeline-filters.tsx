@@ -21,11 +21,11 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { DEFAULT_RANGE, type Filters, RANGES, TYPES } from "@/lib/timeline";
 
-const ALL = "__all__";
+export const ALL = "__all__";
 
 type Item = { value: string; label: string; mono?: boolean };
 
-function FilterSelect({
+export function FilterSelect({
   label,
   icon: Icon,
   items,
