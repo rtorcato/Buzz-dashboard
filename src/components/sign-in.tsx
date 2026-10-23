@@ -75,7 +75,13 @@ async function signIn(): Promise<string | null> {
     body: JSON.stringify(event),
   });
   if (login.status === 403) return "That key isn't the dashboard's owner.";
-  return login.ok ? null : "Sign-in failed. Try again.";
+  if (login.ok) return null;
+  const { error } = (await login.json().catch(() => ({}))) as {
+    error?: string;
+  };
+  return error === "wrong url"
+    ? "Open the dashboard at its AUTH_PUBLIC_URL to sign in."
+    : "Sign-in failed. Try again.";
 }
 
 /** "Sign in with Nostr" for an owner note outside the sidebar. */
