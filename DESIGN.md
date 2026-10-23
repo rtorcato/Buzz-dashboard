@@ -9,6 +9,7 @@ The design spec for buzz-dashboard. Read it before writing any UI code, and keep
 - **Update:** the docs site home page (see Docs site), approved by rtorcato on 2026-10-22.
 - **Update:** history and alerts (#39 to #47): Timeline with Buzz events, Health, Cost, Alerts, Needs-you snooze and ack, the generic Pipeline flow and the cost chip, approved by rtorcato on 2026-10-23. They all read the optional history store (#39), and anything that saves needs owner sign-in (#40), so build those two first.
 - **Update:** Settings → Sources (#42, #43), approved by rtorcato on 2026-10-23: connected and not-connected states, the owner-signer confirm dialog, an ingest token on the OTel endpoint, one cost source at a time and no log source in v1.
+- **Update:** the Releases view (#71) and the first-run setup wizard (#73), approved by rtorcato on 2026-10-23. The wizard saves to a config store that env always overrides, so build that store first.
 - **Mockups:** kept outside the repo and not linked from it. This file is the spec, so build from the text below.
 
 ## Principle
@@ -64,7 +65,7 @@ The `ViewTabs` pill row goes. Use the stock shadcn `Sidebar` with `collapsible="
 | **Health** | See Health (#44). |
 | **Cost** | See Cost (#42). |
 | **Pipeline** | A `Tabs` row, **Now** and **Flow** (see Pipeline flow, #47). **Now** is the view below. When Custom stages are set, its stage cards are those labels; with the default PR lifecycle they are Opened, In review, Approved and Stalled. Today's view: 5 stage stat `Card`s (`ai-ready` … `ai-blocked`, with mono labels). Then a `BarChart` of PRs opened vs merged per day (chart-1 and chart-2, with legend and tooltip), filtered by a `Select` for agent and a `ToggleGroup` for 7d, 14d or 30d. Then a `Table` by repo, with blocked repos first and the ready/wip/review columns hidden on phones. Last, a `Table` by agent, taking the agent from the PR body's `@Name` header. PRs without that header go under "Unattributed". |
-| **Releases** | A "Waiting for your approval" `Card`, one row per release: repo, version `Badge`, commit subject, how long it has waited (`Badge`), and an outline "Review on GitHub" `Button`. A "Red CI on main" `Card`, one row per failure: repo, job, SHA, how long it has failed (`Badge`), and "View run". Last, a `Table` of npm packages: version and publish date, plus a "Release pending" badge when `main` has unreleased commits. |
+| **Releases** | See Releases (#71). |
 | **Timeline** | Without a database: a `BarChart` of events per hour today (chart-3, with the current hour in chart-1) and 2 stat `Card`s. Then a live-feed `Card` with a `ToggleGroup` type filter and a `Select` for agent. Rows are grouped by hour under sticky headers. A row that needs the owner gets a 5% status tint and a "Needs you" `Badge`. With the history store, see Timeline (#41). |
 
 ## Runtime status (#24)
@@ -214,6 +215,40 @@ The Flow tab answers "where do PRs wait?", for any repo and with no setup.
   - Changing stages saves to the database, so it needs sign-in. Signed out, the card is read-only with "Sign in to change stages".
 - **Stage colours** are a blue ramp, `--stage-1..3` (see Tokens), light to dark in step order, each with a text colour for the in-bar label.
 
+## Releases (#71)
+
+> **Status:** approved by rtorcato on 2026-10-23.
+
+`/releases`. Per watched repo: the latest tag, what has merged since it, the release run and the last npm publish. It reuses the GitHub reads in `src/lib/github.ts` and the same refresh cadence. It's read-only, so approving a release always opens GitHub.
+
+- **Shell:** the normal one, with Needs you on top. Releases already owns the "release waiting for approval" and "Red CI on `main`" Needs-you rows, so its sidebar count is those two.
+- **Stats:** 4 stat `Card`s (2 by 2 on phones).
+  - **Waiting for approval** (`rocket`): the count, then "`example-lib` v2.4.0 · 5h" for the oldest.
+  - **Unreleased changes** (`git-compare`): "3 repos", then "15 releasing commits on `main`".
+  - **Red CI on main** (`circle-x`): the count, in destructive text when it isn't 0, then the repo and "failing 2h".
+  - **Last publish** (`package-check`): the newest npm version across watched repos, then the repo and the publish time.
+- **Waiting for your approval** (`Card`, `rocket`, a warning-tint count pill, "Oldest first" muted on desktop). One row per release run waiting on an environment approval, oldest first:
+  - A 36px warning icon tile with `rocket`.
+  - The repo (mono, 14px), a version `Badge` "v2.3.1 → v2.4.0" (muted arrow) and a warning `Badge` "`clock` waiting 5h".
+  - Muted under it: "3 releasing commits · newest `feat` add a retry option to the fetch helper · `release.yml` run #212", with the commit's type chip (below).
+  - On the right, an outline "Review on GitHub" `Button` (`external-link`) to the run's approval page. Full width under the text on phones.
+- **Red CI on main** (`Card`, `circle-x`, destructive count pill). One row per repo whose latest `main` run failed: a 36px destructive icon tile, the repo and a destructive `Badge` "`clock` failing 2h", then muted "test (ubuntu, node 22) · `a41c9e2` fix: handle an empty config file". When the repo has unreleased releasing commits, the line ends "· blocks the next release". "View run" (`external-link`) on the right.
+- Both cards are left out when they're empty. Their stat cards still show 0.
+- **Repos** (`Card`, `tag`, "5 watched · unreleased first" muted, and a `ToggleGroup` All / Unreleased / Up to date on the right, hidden on phones). A watched repo is one under `GITHUB_OWNERS` with at least one tag or a release workflow. The `Table` columns:
+  - **Repo** (mono).
+  - **Latest tag:** the tag (mono) and its date (muted, `text-xs`).
+  - **Unreleased on main:** the commit count since the tag (600), then one type chip per type with its count: "feat 1", "fix 2". With nothing since the tag, `circle-check-big` "Up to date" in `success`.
+  - **Next:** the bump and the version it would give, "minor → `v2.4.0`" (muted arrow). "no release" (muted) when every commit is a non-releasing type, "–" when up to date.
+  - **npm:** the published version (mono) and date. A muted "Release pending" `Badge` when `main` has releasing commits that aren't published. "not on npm" (muted) for a repo with no package.
+  - **Release run:** one of a warning `Badge` "`clock` Waiting for you · 5h", a destructive `Badge` "`circle-x` CI red on main", muted "`circle-dashed` Not started", `circle-check-big` (success) + muted "Published Oct 21", or "–".
+  - A `chevron-right` (muted) on each row, `chevron-down` when open.
+- **Sort:** waiting for approval, then red CI, then the most unreleased releasing commits, then repos with only non-releasing commits, then up to date. Ties go by repo name.
+- **Type chips:** Geist Mono 11.5px, 20px tall, `rounded-[5px]`, a 1px border at 35% and a fill at 8% of their colour. `feat` uses `info`, `fix` and `perf` use `success`, and a breaking change uses `destructive` and reads "feat!" (or "fix!"). Everything else (docs, chore, refactor, test, ci, build, style) is muted on `muted`. The type is always written out, so the colour is never the only signal.
+- **Expanding a row:** the whole row is a button (`aria-expanded`) that opens the commit list under it. Any number can be open. The open row gets a 3% `foreground` tint and a 3px `foreground` bar on its left edge. The list, on the same tint and indented to line up with the Latest tag column, shows one line per commit, newest first: type chip, subject, PR number (mono, muted), agent (from the PR's `@Name` header, muted) and age. It shows 4, then a footer: "+ 3 more · 2 fix, 1 chore · Merged since `v3.1.0` on Mon", with "Compare on GitHub" (`external-link`) on the right, linking to `compare/<tag>...main`.
+- **"Next" is labelled a guess.** It comes from the conventional-commit prefixes since the last tag: `feat` → minor, `fix` and `perf` → patch, `!` or a `BREAKING CHANGE` footer → major. The table footer says so, with `info`: "“Next” reads the conventional-commit prefixes since the last tag (feat → minor, fix → patch, ! → major). It’s a guess; the release workflow decides."
+- **No GitHub source** (no `GITHUB_TOKEN`): one `Card` with two dashed not-connected boxes, "Tags, unreleased commits and release runs · Read from GitHub for each watched repo." (`git-branch`) and "Last publish · The latest npm version of each repo’s package." (`package`), each with a mono "not connected", then an outline "`plug-zap` Connect a source" `Button` to Settings → Sources. npm needs GitHub too, since the package names come from each repo's `package.json`. No stats, no zeros.
+- **Phone:** the table becomes a list. Each item is at least 44px tall: the repo (mono, 500), the tag (mono, muted) and the run `Badge` on one line, then "**7** unreleased · feat 2 · fix 4 · chore 1 · minor → v3.2.0" (muted, `text-xs`), and a `chevron-right`. Tapping it opens the same commit list.
+
 ## Needs you: snooze and ack (#46)
 
 Snoozing or acking stops the **alerts**. The item stays on the page.
@@ -358,9 +393,91 @@ What changed from the request in #58, as approved:
 - **Moved: the theme toggle** leaves the header for Appearance.
 - **About** shows no infrastructure: no feed URL, hostnames or bucket names.
 
+## Setup wizard (#73)
+
+> **Status:** approved by rtorcato on 2026-10-23.
+
+`/setup` replaces the env-file dance on first run. It walks the owner through the relay settings, then the optional sources, and saves them to the config store. It is served only while the dashboard has no relay settings. When the env file sets `BUZZ_RELAY_URL`, `BUZZ_PRIVATE_KEY`, `BUZZ_AUTH_TAG` and `BUZZ_OWNER_PUBKEY`, `/setup` is never served, and after Finish it redirects to `/` for good. **Env always beats saved config**, value by value.
+
+- **No shell.** `/setup` has no sidebar, no Needs you and no header chips. It has a 56px top bar instead: the 32px Hive mark tile, "Hive" (semibold) and "Setup" (muted). Once unlocked, the right side shows a success `Badge` "`shield-check` Unlocked" and, on desktop, "setup token expires in 54 min" (muted, `text-xs`).
+
+### The gate
+
+A single `Card`, `max-w-[480px]`, centred 72px below the bar (24px on phones).
+
+- Title "Set up this dashboard", then "It isn’t connected to a relay yet. To prove you run it, paste the one-time setup token from the container logs."
+- "`square-terminal` Find it with", then a mono command block on `muted`, `docker compose logs dashboard | grep "setup token"`, with an outline "`copy` Copy" beside it. Hint: "The line looks like `setup token: 7Q2M-…-PB3W` (valid 60 min)".
+- "Setup token" `Input`, mono, placeholder `XXXX-XXXX-XXXX-XXXX`, focused on load.
+- A full-width primary "`lock` Unlock setup" `Button` (`size="lg"`).
+- Muted `text-xs` footer: "The token works once and runs out after 60 minutes. Restart the container for a new one. Setting the relay variables in env skips this page entirely." plus a "Configuration docs" link.
+- **Wrong token:** the input gets the destructive border and a destructive hint, "`circle-x` That token doesn’t match. Check the logs for a newer one. 4 tries left." After 5 wrong tries the token is dead, and the hint says to restart the container.
+- **Token rules:** the server prints a new token to the logs at each start while setup is open. It is valid for 60 minutes and 5 tries, and unlocking uses it up. Unlocking starts a setup session that ends when those 60 minutes run out or setup finishes. The token never appears in the page.
+
+### The steps
+
+A `max-w-[1040px]` page: a 240px stepper column, then the step `Card`, with a 40px gap.
+
+- **Stepper** (`nav`, `aria-label="Setup steps"`, sticky): one row per step with a 28px round marker, the step name (500) and a muted `text-xs` line. The current step is on `muted` with a `primary` marker and `aria-current="step"`. Done steps show `check` on a 14% `success` tint, and later steps a numbered outline marker in muted text. Under the steps, a dashed note: "`lock` Setup closes for good when you finish, and the token in the logs stops working."
+  1. Dashboard key · Its own read-only identity
+  2. Owner · You vouch for it, once
+  3. Relay · Test the connection
+  4. Optional sources · GitHub, media, history
+  5. Finish · Review and close setup
+- **Step card:** a muted "Step 2 of 5" kicker, the title (`text-xl font-semibold`), a muted description, the body, then a footer with a top border: ghost "`arrow-left` Back" on the left (none on step 1) and the primary "Continue `chevron-right`" on the right, both `h-10`. **Continue is disabled until the step passes** (`aria-disabled`, 50% opacity).
+- **Phones:** the stepper is replaced by "Step 2 of 5 · Owner" (500) with "Next: Relay" muted on the right, over a 5-segment progress bar (4px, `foreground` for done and current, `border` for the rest). Footer buttons stack full width at 44px, Continue on top.
+
+**1. Dashboard key.** "Give the dashboard its own key" · "The dashboard joins your relay as its own Nostr identity, never yours or an agent’s. We made one for it on this server."
+
+- A bordered box: the 44px mark tile, "Hive dashboard" (500) and its npub (mono, muted, truncated), and an outline "`copy` Copy npub". Under it, muted `text-xs`: "`server` Generated just now. The private key stays on the server, in a file only the server can read. It is never sent to this browser."
+- "What this key can do", three columns (stacked on phones): `circle-check` (success) "Answer the relay’s login challenge, so it can read your channels", then `circle-slash` (muted) "Post to a channel, DM anyone or act on GitHub" and "Hold your owner key. That stays in your extension."
+- A `Collapsible`, "Already have a key for this dashboard?": "Set `BUZZ_PRIVATE_KEY` in the env file and restart. Setup then shows it here as “Set in env” and skips this step."
+- The server generates the keypair on its first visit to this step, and only the npub goes to the browser. The private key is not encrypted at rest: it is the root key that #68 derives its wrapping key from, so it cannot be wrapped by itself. It is written to the config volume as a `0600` file owned by the server user, and that file permission is its only protection, the same as `BUZZ_PRIVATE_KEY` in an env file. The copy above must not say "encrypted".
+
+**2. Owner.** "Vouch for the dashboard" · "Your relay only lets the dashboard in if a member vouches for its key. Your Nostr extension signs a one-time attestation (NIP-OA). Your key never leaves the extension." It reuses the NIP-07 sign-in from #40.
+
+- **Ready:** a bordered box with a primary "`key-round` Sign with your extension" `Button`.
+- **Waiting:** the box is centred and the button is disabled, with a spinning `loader-circle` and "Waiting for your extension…". Under it: "Approve the signing request in your extension’s popup." and muted "It asks to sign one event that names `npub1…`. Nothing is posted." A "Cancel" link goes back to Ready.
+- **Signed:** a box on the 6% `success` tint with a 35% border: the 44px `Avatar`, the name (600) with a success `Badge` "`circle-check-big` Signed", the npub (mono, muted), and a "Use another account" link on the right. Muted under it: "Attestation for `npub1…` · signed just now with your extension". Then a dashed note: "`key-round` **Sam becomes the dashboard’s owner.** Only this account can sign in to snooze, ack and change sources, and only agents Sam has attested count as agents." Continue unlocks.
+- **No extension:** a box on the 7% `warning` tint: "`triangle-alert` **No Nostr extension found in this browser**", "Install a NIP-07 extension (Alby, nos2x or similar), sign in to it with your owner account, then try again.", and an outline "`refresh-cw` Try again". Under it an open `Collapsible`, "Paste a signed attestation instead": a mono `Textarea` (placeholder `["auth","<owner hex>","<conditions>","<sig>"]`) and the hint "Sign it for `npub1…` with your own tooling." with a "How to make one" docs link. The server checks that a pasted tag names this dashboard's key before Continue unlocks.
+- Signing sets the owner (`BUZZ_OWNER_PUBKEY`) and the auth tag (`BUZZ_AUTH_TAG`), and signs the owner in, so they leave setup signed in.
+
+**3. Relay.** "Connect to your relay" · "Where your Buzz community lives. The dashboard logs in with its key and your attestation, then counts your agents."
+
+- "Relay URL" `Input` (mono, `wss://` placeholder) with an outline "`plug-zap` Test again". The test runs by itself when the step opens.
+- A checklist, `aria-live="polite"`, one row each with a status icon, the text and a muted right-hand detail:
+  - "Reached the relay" · "84 ms".
+  - "Logged in as `npub1…`, vouched for by Sam" · "NIP-42".
+  - "**Found 14 agents** in 9 channels", with a 28px overlapping `Avatar` stack of the first five and "Fern, Gale, Juniper, Briar and 10 more" (muted, `text-xs`).
+- **A check fails:** it gets `circle-x` and a bold destructive title in plain words, "The relay refused the login", then muted "The account that signed the attestation isn’t a member of this community. Sign with a member account, or add the dashboard’s key as a member in Buzz.", then the relay's own reply in mono `text-xs` ("relay said: restricted: not a member"), then an outline "`arrow-left` Back to Owner" when the fix is there. Checks after it show `circle-dashed`, muted, with "skipped". A failed "Reached the relay" says so and asks for the URL instead.
+
+**4. Optional sources.** "Optional sources" · "Each one turns on more of the dashboard. Skip any of them: you can add them later in Settings → Sources." Continue is always on here.
+
+- One bordered row per source: a 36px icon tile on `muted`, the name (500) with a status `Badge`, and a muted line saying what it turns on. On the right, an outline "Set up" that expands the row, or a `chevron-down` once it's open.
+  - **GitHub** (`git-branch`) · "Pipeline, Releases, red CI and blocked issues in Needs you".
+  - **Media bucket** (`images`) · "The Media view, from an R2 bucket (read-only key)".
+  - **History database** (`database`) · "Postgres: Health, Cost, Timeline search, alerts and snooze".
+- Badges: muted "Skipped" until tested, success "`circle-check-big` Tested" once the test passes. A failed test shows the plain-words reason under the Test button in destructive text, and the source stays Skipped.
+- **GitHub, expanded:**
+  - "Token": a password `Input` showing `github_pat_••••…Q7wd` with an `eye` toggle, and the hint "Fine-grained and read-only: Metadata, Issues, Pull requests, Actions and Deployments." plus a "Create one" link (`external-link`).
+  - "Read repos owned by" (`GITHUB_OWNERS`): a tag field, one removable `Badge` per user or org (`x` button, `aria-label="Remove example-org"`), then an inline input "Add a user or org…". Enter or a comma adds one.
+  - "Accounts that name agents in PRs" with a muted "optional" (`GITHUB_TRUSTED_AUTHORS`): the same tag field, hint "PRs from anyone else show as Unattributed."
+  - An outline "`plug-zap` Test", then the result: "`circle-check-big` Token for `example-org` · 12 repos · 4,998 of 5,000 calls left".
+- **Media bucket** and **History database** expand the same way, with their own fields (`MEDIA_BASE_URL` and the four `R2_*` values; `DATABASE_URL`) and a Test. Every secret field is a password input showing only its last 4 characters.
+
+**5. Finish.** "Review and finish" · "Check everything once more. Finishing saves it and closes setup."
+
+- A summary list, one row per item: a status icon (`circle-check-big` success, or `circle-dashed` muted for skipped), the label (muted, 140px), the value, and an "Edit" link that jumps back to that step. Values: the dashboard npub, the owner's name and npub, the relay URL with "· 14 agents", the GitHub owners with "· 12 repos", and "Skipped" or "Skipped · live view only" for the rest. Secrets show as their source, never their value. Rows stack on phones, with Edit on the right.
+- A `muted` box: "`lock` **Finishing closes /setup for good.** The setup token stops working. Sign in as Sam to change sources in Settings, or set values in the env file, which always wins."
+- The primary button reads "Finish setup `chevron-right`".
+
+**Done.** The same centred 480px card as the gate: a 56px success circle with `check`, "The dashboard is ready", then muted "Connected to `relay.example.com` with 14 agents. You’re signed in as Sam, and /setup is now closed.", a primary "Open the dashboard `arrow-right`" (`size="lg"`) and a muted hint, "Next, if you want cost: Settings → Sources → Cost source."
+
+- **Rules:** setup writes only the dashboard's own config. It never posts to the relay or GitHub. The attestation is signed in the extension and sent to the dashboard's server only. A value set in env shows as "Set in env", read-only, and its step or field is skipped.
+- **Motion:** the spinner turns only while waiting on the extension or a test, and stays static under `prefers-reduced-motion`. Steps swap without animation.
+
 ## Components
 
-Use stock shadcn/ui only, with no custom components: `Card`, `Badge`, `Table`, `ToggleGroup`, `Select`, `Avatar`, `Alert`, `Button`, `Dialog`, `Tooltip` and `ScrollArea`. Use shadcn charts (`ChartContainer` + Recharts `BarChart`) for every chart. One exception: the Agents card's 7-day sparkline is a small inline SVG, because it has no axes, tooltip or legend to justify adding Recharts. Switch it to a `BarChart` once another view adds Recharts. Icons come from `lucide-react`. The agent page adds `Breadcrumb` and `Skeleton`. The sidebar and Settings (#58) add `Sidebar`, `Sheet`, `Separator`, `Switch`, `Input` and `AlertDialog`. The history views (#39 to #47) add `Tabs`, `DropdownMenu`, `RadioGroup` and `Checkbox` (the signer dialog); their charts are stacked `BarChart`s (vertical for Health and Cost, `layout="vertical"` for the Flow step bars). The thin per-row bars in the Flow PR table and the Cost top-agents table are plain flex `div`s, like the sparkline, since they have no axes or tooltip. The one non-shadcn component is [motion-primitives](https://motion-primitives.com) `AnimatedNumber`, which brings in the `motion` package (approved by rtorcato on 2026-10-16). See Motion.
+Use stock shadcn/ui only, with no custom components: `Card`, `Badge`, `Table`, `ToggleGroup`, `Select`, `Avatar`, `Alert`, `Button`, `Dialog`, `Tooltip` and `ScrollArea`. Use shadcn charts (`ChartContainer` + Recharts `BarChart`) for every chart. One exception: the Agents card's 7-day sparkline is a small inline SVG, because it has no axes, tooltip or legend to justify adding Recharts. Switch it to a `BarChart` once another view adds Recharts. Icons come from `lucide-react`. The agent page adds `Breadcrumb` and `Skeleton`. The sidebar and Settings (#58) add `Sidebar`, `Sheet`, `Separator`, `Switch`, `Input` and `AlertDialog`. The history views (#39 to #47) add `Tabs`, `DropdownMenu`, `RadioGroup` and `Checkbox` (the signer dialog); their charts are stacked `BarChart`s (vertical for Health and Cost, `layout="vertical"` for the Flow step bars). The thin per-row bars in the Flow PR table and the Cost top-agents table are plain flex `div`s, like the sparkline, since they have no axes or tooltip. The setup wizard (#73) adds `Collapsible` and `Textarea`. Its tag fields are `Badge`s inside an `Input`-styled box, and its phone progress bar is plain `div`s. The one non-shadcn component is [motion-primitives](https://motion-primitives.com) `AnimatedNumber`, which brings in the `motion` package (approved by rtorcato on 2026-10-16). See Motion.
 
 ## Motion
 
