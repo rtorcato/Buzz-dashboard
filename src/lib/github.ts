@@ -286,9 +286,9 @@ function refresh(token: string): Promise<Fetched> {
 // A full read is 8 sequential requests and takes about 20s, so requests get
 // the last good read at once and a refresh runs behind them once it is 2
 // minutes old. Only the first request after a start (or after 5 minutes of
-// failures) waits.
-export const loadGitHub = cache(async (): Promise<GitHubResult> => {
-  await connection();
+// failures) waits. The history ingester calls this outside a request, so it
+// shares the read instead of making its own.
+export async function readGitHub(): Promise<GitHubResult> {
   // Read directly: readServerEnv() also demands the relay vars, and a relay
   // misconfiguration shouldn't take GitHub down with it.
   const token = process.env.GITHUB_TOKEN;
@@ -306,4 +306,9 @@ export const loadGitHub = cache(async (): Promise<GitHubResult> => {
       error: err instanceof Error ? err.message : "error",
     };
   }
+}
+
+export const loadGitHub = cache(async (): Promise<GitHubResult> => {
+  await connection();
+  return readGitHub();
 });

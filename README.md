@@ -185,6 +185,8 @@ reach the browser, and an empty value counts as unset. See
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | No | S3 credentials of an R2 API token with Object Read only on that bucket |
 | `AGENT_ALIASES` | No | JSON of renamed agents, former → current display name, e.g. `{"Fizz":"Prime"}`. The old profile folds into the current name and `/agents/<old-name>` redirects |
 | `NEEDS_YOU_EXCLUDE_LABELS` | No | Comma list of labels to leave off Needs you. Set it to `merge-ready` if a merge bot handles those PRs |
+| `DATABASE_URL` | No | Postgres URL of the optional history store, e.g. `postgres://hive:hive@127.0.0.1:5432/hive`. Unset keeps the live-only dashboard with the history views hidden. See [Local dev with history](#local-dev-with-history) |
+| `HISTORY_RETENTION_DAYS` | No | Days of history to keep. Defaults to 90 |
 | `TZ` | No | Time zone for "today" on the Agents view, e.g. `America/Toronto`. Defaults to the server clock |
 
 The five `MEDIA_BASE_URL` and `R2_*` variables go together: if any is missing,
@@ -335,6 +337,38 @@ pnpm build       # next build (standalone output)
 ```
 
 CI runs all four on every pull request and push to `main`.
+
+### Local dev with history
+
+The history store (Timeline search, Health, Cost, Alerts, the Pipeline Flow
+tab) is optional Postgres. Without `DATABASE_URL`, `pnpm dev` runs the
+live-only dashboard and never touches Docker.
+
+1. Set `DATABASE_URL=postgres://hive:hive@127.0.0.1:5432/hive` in
+   `.env.local` (the commented line in `.env.example`).
+2. Run `pnpm dev`. When `DATABASE_URL` points at this machine, `predev` runs
+   `docker compose up -d --wait postgres` first, and stops with a one-line
+   error if Docker isn't running. Running `docker compose up -d postgres`
+   yourself beforehand is optional.
+3. On start the server applies any pending migrations from `drizzle/`, then
+   ingests GitHub and Buzz events every minute and drops events older than
+   `HISTORY_RETENTION_DAYS` (90 by default).
+
+The `postgres` service binds to `127.0.0.1:5432` only and keeps its data in
+the `hive-history` volume. It sits behind the `history` compose profile, so a
+plain `docker compose up` doesn't start it. Run `docker compose --profile
+history up -d` for both services, with `DATABASE_URL` in `.env` pointing at
+`postgres:5432`. Set `POSTGRES_PASSWORD` for anything reachable beyond your
+machine.
+
+```sh
+pnpm db:generate   # write a migration after changing src/lib/history-schema.ts
+pnpm db:migrate    # apply migrations by hand (the server also does it on start)
+pnpm db:studio     # browse the store in Drizzle Studio
+```
+
+`pnpm-workspace.yaml` sets `verifyDepsBeforeRun: install`, so `pnpm dev` and
+the other scripts reinstall first when `node_modules` is behind the lockfile.
 
 ### Docs screenshots
 

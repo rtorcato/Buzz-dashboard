@@ -11,6 +11,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { historyEnabled } from "@/lib/history";
 import { countsByView, getNeedsYou } from "@/lib/needs-you";
 import { loadStatusFeed } from "@/lib/status-feed";
 
@@ -33,7 +34,7 @@ export default async function ViewsLayout({
       <SidebarProvider
         defaultOpen={jar.get("sidebar_state")?.value !== "false"}
       >
-        <AppSidebar counts={counts} />
+        <AppSidebar counts={counts} history={historyEnabled()} />
         <SidebarInset className="min-w-0">
           <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
             <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-4 sm:px-6">
