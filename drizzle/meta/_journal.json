@@ -15,6 +15,13 @@
       "when": 1792769487335,
       "tag": "0001_cost",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792770714905,
+      "tag": "0002_cost_channel",
+      "breakpoints": true
     }
   ]
 }

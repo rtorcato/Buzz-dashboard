@@ -50,7 +50,8 @@ export type NewHistoryEvent = typeof events.$inferInsert;
 
 // Cost reports from Claude Code OpenTelemetry (#42): one row per delta data
 // point of claude_code.cost.usage or claude_code.token.usage. The key drops a
-// point the exporter retries.
+// point the exporter retries. The owner signer (#43) writes the same rows from
+// Buzz's per-turn reports, with the turn's event id as the series.
 export const costPoints = pgTable(
   "cost_points",
   {
@@ -68,6 +69,8 @@ export const costPoints = pgTable(
      */
     series: text("series").notNull(),
     value: doublePrecision("value").notNull(),
+    /** The turn's Buzz channel id; only the owner signer's reports (#43) have one. */
+    channel: text("channel"),
   },
   (t) => [
     primaryKey({

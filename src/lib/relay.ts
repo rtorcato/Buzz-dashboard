@@ -56,6 +56,11 @@ export function signAuthEvent(
   return { ...unsigned, id, sig };
 }
 
+/** Signs the relay's AUTH challenge; the dashboard's own key by default. */
+export type AuthSigner = (
+  challenge: string,
+) => NostrEvent | Promise<NostrEvent>;
+
 // One connection, one AUTH, one REQ: resolves with every stored event that
 // matches any of the filters once the relay sends EOSE.
 // ponytail: trusts the relay's signature checks rather than re-verifying each
@@ -64,6 +69,7 @@ export function queryRelay(
   env: RelayEnv,
   filters: Filter[],
   timeoutMs = 10_000,
+  sign: AuthSigner = (challenge) => signAuthEvent(env, challenge),
 ): Promise<NostrEvent[]> {
   return new Promise((resolve, reject) => {
     const events: NostrEvent[] = [];
@@ -91,12 +97,13 @@ export function queryRelay(
       }
       switch (msg[0]) {
         case "AUTH":
-          try {
-            const auth = signAuthEvent(env, String(msg[1]));
-            ws.send(JSON.stringify(["AUTH", auth]));
-          } catch (err) {
-            finish(err as Error);
-          }
+          // Async for the owner signer (#43), which answers over NIP-46.
+          Promise.resolve()
+            .then(() => sign(String(msg[1])))
+            .then(
+              (auth) => ws.send(JSON.stringify(["AUTH", auth])),
+              (err) => finish(err as Error),
+            );
           break;
         case "OK":
           if (msg[2] !== true) {

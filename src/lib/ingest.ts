@@ -1,18 +1,38 @@
 import "server-only";
 
 import { and, eq, max } from "drizzle-orm";
+import { loadSignerRecord } from "./cost-source";
 import { readServerEnv } from "./env";
 import { type GitHub, readGitHub } from "./github";
 import {
   historyDb,
+  insertCostPoints,
+  knownSeries,
   migrateHistory,
+  newestCostPoint,
   pruneHistory,
   retentionDays,
 } from "./history";
-import { events, type NewHistoryEvent } from "./history-schema";
-import { queryAll } from "./hive";
+import {
+  events,
+  type NewCostPoint,
+  type NewHistoryEvent,
+} from "./history-schema";
+import { getHive, queryAll } from "./hive";
+import { npubEncode } from "./npub";
 import type { NostrEvent } from "./relay";
 import { sampleMode } from "./sample-data";
+import {
+  authTemplate,
+  closeSigner,
+  isTurnFor,
+  openSigner,
+  REQUEST_MS,
+  type SignerRecord,
+  TURN_KIND,
+  turnRows,
+  withTimeout,
+} from "./signer";
 
 // The history ingester (#39): every minute it appends what the dashboard
 // already reads (GitHub PRs and claims, Buzz channel messages) to the history
@@ -155,6 +175,84 @@ export async function ingestOnce(now = new Date()) {
   if (failed.length) throw new Error(failed.join("; "));
 }
 
+/** Decrypts at most this many turns a pass; a backfill finishes over a few. */
+const MAX_TURNS = 400;
+/** Decrypt requests in flight at once. */
+const PARALLEL = 20;
+
+/**
+ * One owner-signer pass (#43): reads new turn reports from the Buzz relay as
+ * the owner and stores them as cost points. Every round trip goes through the
+ * owner's signer, so it skips turns it already stored before decrypting.
+ * Returns how many turns it stored.
+ */
+export async function ingestTurns(record: SignerRecord): Promise<number> {
+  const env = readServerEnv();
+  const newest = await newestCostPoint();
+  const since = Math.max(
+    record.since,
+    newest ? Math.floor(newest.getTime() / 1000) - OVERLAP_S : 0,
+  );
+  const s = openSigner(Uint8Array.from(Buffer.from(record.clientKey, "hex")), {
+    ...record.bunker,
+    secret: null,
+  });
+  try {
+    // ponytail: like ingestBuzz, at most 10 relay pages (10,000 turns) a
+    // pass, the newest; a first backfill on a busy hive keeps only those.
+    const found = await queryAll(
+      env,
+      { kinds: [TURN_KIND], "#p": [record.pubkey], since },
+      REQUEST_MS * 2,
+      (challenge) =>
+        withTimeout(
+          s.signer.signEvent(authTemplate(env.buzzRelayUrl, challenge)),
+          REQUEST_MS,
+        ),
+    );
+    const turns = found.filter((e) => isTurnFor(e, record.pubkey));
+    const known = await knownSeries(turns.map((e) => e.id));
+    // Oldest first, so a capped pass leaves only newer turns for the next.
+    const fresh = turns
+      .filter((e) => !known.has(e.id))
+      .sort((a, b) => a.created_at - b.created_at)
+      .slice(0, MAX_TURNS);
+    if (!fresh.length) return 0;
+
+    const names = new Map<string, string>();
+    try {
+      for (const a of (await getHive()).agents) {
+        for (const pk of a.pubkeys) names.set(pk, a.name);
+      }
+    } catch {
+      // Unnamed agents fall back to their npub.
+    }
+    let stored = 0;
+    for (let i = 0; i < fresh.length; i += PARALLEL) {
+      const rows: NewCostPoint[] = [];
+      const batch = fresh.slice(i, i + PARALLEL);
+      const plain = await Promise.allSettled(
+        batch.map((e) =>
+          withTimeout(s.signer.nip44Decrypt(e.pubkey, e.content), REQUEST_MS),
+        ),
+      );
+      batch.forEach((e, j) => {
+        const p = plain[j];
+        // A report that fails to decrypt or parse is skipped, as NIP-AM says.
+        if (p.status !== "fulfilled") return;
+        const agent = names.get(e.pubkey) ?? npubEncode(e.pubkey);
+        const r = turnRows(e, p.value, agent);
+        if (r.length) stored++;
+        rows.push(...r);
+      });
+      await insertCostPoints(rows);
+    }
+    return stored;
+  } finally {
+    await closeSigner(s);
+  }
+}
+
 // next dev re-imports modules on reload, so the guard lives on globalThis.
 const state = globalThis as { __historyIngester?: true };
 
@@ -196,6 +294,22 @@ export async function startHistory() {
   };
   void tick();
   setInterval(tick, INTERVAL_MS).unref();
+
+  // The owner signer runs on its own, since its round trips can take a while.
+  let reading = false;
+  const readTurns = async () => {
+    if (reading || !migrated) return;
+    reading = true;
+    try {
+      const record = await loadSignerRecord();
+      if (record) await ingestTurns(record);
+    } catch (err) {
+      console.error(`Owner signer: ${message(err)}`);
+    } finally {
+      reading = false;
+    }
+  };
+  setInterval(readTurns, INTERVAL_MS).unref();
 }
 
 const message = (err: unknown) =>

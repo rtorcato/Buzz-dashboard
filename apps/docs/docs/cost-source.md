@@ -49,10 +49,42 @@ Claude Code sends delta values by default. Leave `OTEL_EXPORTER_OTLP_METRICS_TEM
 - **Rotate** in Settings → Sources makes a new token and stops the old one at once. Every agent's reports stop until you paste the new token into its environment.
 - If you lose the token, rotate it. It can't be shown again.
 
+## Owner signer (NIP-46)
+
+Buzz already publishes a report for every agent turn (NIP-AM, `kind:44200`): tokens, an estimated cost, the model and the turn's channel. It works for every harness, with no agent changes. The relay serves those reports only to the hive owner, encrypted to the owner's key, so the dashboard can read them only through the owner's own Nostr signer: a NIP-46 "bunker" such as nsec.app, Amber, or a bunker on your own machine.
+
+**It's off by default, and OpenTelemetry is the recommended source.** Read the trade-off before you turn it on.
+
+### The trade-off: your signer could decrypt your DMs
+
+A signer can't limit decryption to cost reports. Once it trusts the dashboard, it decrypts whatever the dashboard asks. If the dashboard were ever compromised, an attacker could ask your signer to decrypt your direct messages and anything else encrypted to your key. Your key itself never leaves the signer, and you can revoke the dashboard there at any time.
+
+Use the owner signer only if your agents can't send OpenTelemetry, for example because they don't run Claude Code.
+
+### Connect it
+
+1. **Sign in as the owner** ([Owner sign-in](./owner-sign-in.md)). The signer must sign as a key in `BUZZ_OWNER_PUBKEY`; the dashboard checks that before it saves anything.
+2. In your signer app, create a connection and copy its `bunker://` address. Only `bunker://` addresses with a `relay` are accepted, and the dashboard must be able to reach that relay.
+3. In **Settings → Sources**, pick **Owner signer**, paste the address, tick the box that you understand the trade-off, and choose **Connect signer**. Approve the request in your signer app if it asks.
+
+The dashboard keeps the signer's public key and relays, and a client key of its own that the signer knows it by. It doesn't keep the address's one-time secret, and the page never shows the address again. That client key sits in the history database: anyone who can read the database can talk to your signer as the dashboard until you revoke it.
+
+### What it reads
+
+Every minute, the dashboard signs in to the Buzz relay as you (your signer signs the relay's AUTH challenge), reads new turn reports, and asks the signer to decrypt each one. It checks every report's signature and that it came from an agent to you. It stores the agent, model, channel, tokens and estimated cost in the history database, the same way as OpenTelemetry reports, and skips reports it has already stored, so each turn is decrypted once.
+
+- The first read starts after the newest report already stored, or `HISTORY_RETENTION_DAYS` back when there is none, so turns OpenTelemetry already counted aren't counted again. A big backlog is read 400 turns a minute.
+- Per-turn reports carry the turn's channel, so the Cost view's **Cost per channel** card fills in.
+- A report the signer can't decrypt, or whose numbers the agent couldn't measure, is skipped.
+
+### Switch back
+
+Pick **OpenTelemetry** in Settings → Sources and confirm. The dashboard forgets the signer at once. That doesn't revoke it in the signer app, so remove the dashboard there too.
+
 ## One cost source at a time
 
-The opt-in owner signer (NIP-46), which reads the per-turn reports Buzz already publishes, will be the other choice. Settings → Sources keeps the two to one at a time, so the numbers never double-count.
+Settings → Sources keeps the two sources to one at a time, so the numbers never double-count. While the owner signer is the source, the OpenTelemetry endpoint refuses every report with a `401`, even with a valid ingest token. The token is kept, so switching back needs no agent changes.
 
 ## Not per issue
 
-Cost is per agent, per model and per day. It isn't per issue: a report knows which agent and model it came from, not which issue the agent was working on. Cost per channel needs per-turn reports, which OpenTelemetry doesn't send, so it shows as not connected.
+Cost is per agent, per model and per day. It isn't per issue: a report knows which agent and model it came from, not which issue the agent was working on. Cost per channel needs per-turn reports, which OpenTelemetry doesn't send, so with OpenTelemetry it shows as not connected.

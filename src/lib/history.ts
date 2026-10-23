@@ -11,6 +11,7 @@ import {
   eq,
   gte,
   ilike,
+  inArray,
   isNotNull,
   lt,
   max,
@@ -245,9 +246,13 @@ export async function setSetting(key: string, value: unknown) {
     });
 }
 
-/** Stores OTel cost points; a retried report inserts nothing new. */
+export async function deleteSetting(key: string) {
+  await historyDb().delete(settings).where(eq(settings.key, key));
+}
+
+/** Stores cost points; a retried report inserts nothing new. */
 export async function insertCostPoints(rows: NewCostPoint[]) {
-  // Postgres takes at most 65,535 parameters a statement, 7 per row here.
+  // Postgres takes at most 65,535 parameters a statement, 8 per row here.
   for (let i = 0; i < rows.length; i += 5000) {
     await historyDb()
       .insert(costPoints)
@@ -315,6 +320,44 @@ export function costReporters(since: Date, today: Date) {
     .from(costPoints)
     .where(gte(costPoints.at, since))
     .groupBy(costPoints.agent);
+}
+
+/** The newest stored cost point's time, or null with none. */
+export async function newestCostPoint(): Promise<Date | null> {
+  const [row] = await historyDb()
+    .select({ at: max(costPoints.at) })
+    .from(costPoints);
+  return row?.at ?? null;
+}
+
+/** Which of these series (turn event ids, for the owner signer) are stored. */
+export async function knownSeries(ids: string[]): Promise<Set<string>> {
+  const known = new Set<string>();
+  // Well under Postgres's 65,535 parameters a statement.
+  for (let i = 0; i < ids.length; i += 10_000) {
+    const rows = await historyDb()
+      .selectDistinct({ series: costPoints.series })
+      .from(costPoints)
+      .where(inArray(costPoints.series, ids.slice(i, i + 10_000)));
+    for (const r of rows) known.add(r.series);
+  }
+  return known;
+}
+
+/** Estimated dollars and turns per channel since `since`, costliest first. */
+export function costByChannel(since: Date) {
+  return historyDb()
+    .select({
+      channel: costPoints.channel,
+      cost: sql<number>`coalesce(sum(${costPoints.value}) filter (where ${costPoints.metric} = 'cost'), 0)`.mapWith(
+        Number,
+      ),
+      turns: sql<number>`count(distinct ${costPoints.series})`.mapWith(Number),
+    })
+    .from(costPoints)
+    .where(and(gte(costPoints.at, since), isNotNull(costPoints.channel)))
+    .groupBy(costPoints.channel)
+    .orderBy(sql`2 desc`);
 }
 
 export type { HistoryEvent } from "./history-schema";

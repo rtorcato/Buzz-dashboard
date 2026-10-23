@@ -1,5 +1,5 @@
 import { gunzipSync } from "node:zlib";
-import { ingestTokenRecord } from "@/lib/cost-source";
+import { ingestTokenRecord, signerRecord } from "@/lib/cost-source";
 import { historyEnabled, insertCostPoints } from "@/lib/history";
 import { checkIngestToken } from "@/lib/ingest-token";
 import { decodeCostPoints } from "@/lib/otlp";
@@ -8,6 +8,8 @@ import { decodeCostPoints } from "@/lib/otlp";
 // sets OTEL_EXPORTER_OTLP_ENDPOINT to <dashboard>/otlp; the exporter adds
 // /v1/metrics itself. Every report needs the ingest token, and a refused one
 // gets a bare 401 with no detail. The token only lets an agent post metrics.
+// While the owner signer (#43) is the cost source, every report gets a 401 too,
+// so the two sources never double-count.
 
 /** One export from one agent is a few KB; this leaves plenty of room. */
 const MAX_BYTES = 1_000_000;
@@ -18,7 +20,7 @@ export async function POST(request: Request) {
   if (!historyEnabled()) return empty(404);
   let record: Awaited<ReturnType<typeof ingestTokenRecord>>;
   try {
-    record = await ingestTokenRecord();
+    record = (await signerRecord()) ? null : await ingestTokenRecord();
   } catch (err) {
     console.error("OTLP receiver:", err);
     return empty(503);
