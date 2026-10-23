@@ -14,7 +14,7 @@ The design spec for buzz-dashboard. Read it before writing any UI code, and keep
 
 It's a glanceable ops screen, and it answers one question first: **"does anything need me right now?"** The **Needs you** card sits above every view and is never hidden behind one. Everything else is detail.
 
-The app is read-only toward the hive. Every action on GitHub, npm or Buzz is an outbound link, marked with the `external-link` icon, and the dashboard never posts to the relay or GitHub. The one exception is the dashboard's own state, and only for the signed-in owner (#40): snooze and ack, alert channels and rules, and custom stages. Signed out, no button writes anything.
+The app is read-only toward the hive. Every action on GitHub, npm or Buzz is an outbound link, marked with the `external-link` icon, and the dashboard never posts to the relay or GitHub. The one exception to "never posts" is the opt-in Buzz DM alert channel (#45), which sends only to the owner with a posting key of its own, never the hive's. The other exception is the dashboard's own state, and only for the signed-in owner (#40): snooze and ack, alert channels and rules, and custom stages. Signed out, no button writes anything.
 
 **Without a database** (no `DATABASE_URL`, #39) the dashboard is today's live-only view. Health, Cost and the Pipeline Flow tab leave the sidebar, Timeline shows only the live feed, and Needs you loses its footer, history and snooze/ack. Nothing shows an "add a database" nag.
 
@@ -137,7 +137,7 @@ The runtime and usage data come from one JSON file, object key `hive/status.json
 - `state` is `running` or `stopped`, and `since` is when it entered that state. Percentages are integers. `last_turn`, `model` and both reset times may be `null`.
 - `five_h_pause_at` and `seven_d_pause_at` are the % at which each window pauses the hive. Either may be missing: the chip then drops that tick and its "pauses at", and without the 7d one the higher reading is taken as the limit that tripped.
 - The feed is **stale** when `published_at` is more than 10 minutes old. Stale data is still shown, with its age.
-- An agent with no `runtime` entry is **not reported**. Leave out `usage` and the chip reads "Usage not reported".
+- An agent with no `runtime` entry is **not reported**. Leave out `usage` and there is no "Paused for usage" row; nothing else reads it, since the cost chip (#42) replaced the usage chip.
 - A failed fetch shows the stale state. It doesn't replace the page with a destructive `Alert`, because the relay and GitHub data still render.
 
 ## History views (#39)
@@ -233,7 +233,7 @@ Settings gets a `Tabs` row: **General** (today's page, still `localStorage` only
   - Slack-compatible webhook (`hash`), "Slack, Discord, Mattermost" muted, URL with the secret part elided (`https://hooks.example.com/services/T0…/B0…`).
   - Webhook (`webhook`) with a "JSON" badge.
   - Email (`mail`), address · "uses your SMTP settings".
-  - Buzz DM (`message-square`), an "Opt-in" badge and a warning "`key-round` Needs a posting key" badge: "The dashboard is read-only and never posts. To get alerts as a DM, give it a key of its own that can only send to you." A "Set up" button instead of a switch, and the row is dimmed until set up.
+  - Buzz DM (`message-square`), an "Opt-in" badge and a warning "`key-round` Needs a posting key" badge: "The dashboard never posts as the hive. To get alerts as a DM, give it a key of its own that can only send to you." A "Set up" button instead of a switch, and the row is dimmed until set up.
   - Secrets (webhook URLs, SMTP credentials) are never sent back to the page in full: show the elided form only.
 - **What to alert on** (`Card`, `bell`, "Every alert also shows in Needs you"): a `Table` of Alert (icon + name), When, Send to (channel chips, `muted` when on), Repeat, On (`Switch`). Default rules:
 
