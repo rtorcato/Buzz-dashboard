@@ -428,10 +428,10 @@ A `max-w-[1040px]` page: a 240px stepper column, then the step `Card`, with a 40
 
 **1. Dashboard key.** "Give the dashboard its own key" · "The dashboard joins your relay as its own Nostr identity, never yours or an agent’s. We made one for it on this server."
 
-- A bordered box: the 44px mark tile, "Hive dashboard" (500) and its npub (mono, muted, truncated), and an outline "`copy` Copy npub". Under it, muted `text-xs`: "`server` Generated just now. The private key stays on the server, encrypted in the config volume. It is never sent to this browser."
+- A bordered box: the 44px mark tile, "Hive dashboard" (500) and its npub (mono, muted, truncated), and an outline "`copy` Copy npub". Under it, muted `text-xs`: "`server` Generated just now. The private key stays on the server, in a file only the server can read. It is never sent to this browser."
 - "What this key can do", three columns (stacked on phones): `circle-check` (success) "Answer the relay’s login challenge, so it can read your channels", then `circle-slash` (muted) "Post to a channel, DM anyone or act on GitHub" and "Hold your owner key. That stays in your extension."
 - A `Collapsible`, "Already have a key for this dashboard?": "Set `BUZZ_PRIVATE_KEY` in the env file and restart. Setup then shows it here as “Set in env” and skips this step."
-- The server generates the keypair on its first visit to this step, and only the npub goes to the browser. The private key is stored at rest with the same care as the owner signer (#68).
+- The server generates the keypair on its first visit to this step, and only the npub goes to the browser. The private key is not encrypted at rest: it is the root key that #68 derives its wrapping key from, so it cannot be wrapped by itself. It is written to the config volume as a `0600` file owned by the server user, and that file permission is its only protection, the same as `BUZZ_PRIVATE_KEY` in an env file. The copy above must not say "encrypted".
 
 **2. Owner.** "Vouch for the dashboard" · "Your relay only lets the dashboard in if a member vouches for its key. Your Nostr extension signs a one-time attestation (NIP-OA). Your key never leaves the extension." It reuses the NIP-07 sign-in from #40.
 
