@@ -89,7 +89,7 @@ export default async function HealthPage({
   const params = await searchParams;
   const rangeParam = one(params.range);
   const range: Range =
-    rangeParam && rangeParam in HEALTH_RANGES
+    rangeParam && Object.hasOwn(HEALTH_RANGES, rangeParam)
       ? (rangeParam as Range)
       : DEFAULT_HEALTH_RANGE;
   const rangeH = HEALTH_RANGES[range];
