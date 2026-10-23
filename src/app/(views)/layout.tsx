@@ -11,8 +11,10 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { authMode, getOwner } from "@/lib/auth";
 import { historyEnabled } from "@/lib/history";
 import { countsByView, getNeedsYou } from "@/lib/needs-you";
+import { npubEncode } from "@/lib/npub";
 import { loadStatusFeed } from "@/lib/status-feed";
 
 export default async function ViewsLayout({
@@ -20,11 +22,13 @@ export default async function ViewsLayout({
 }: {
   children: ReactNode;
 }) {
-  const [needsYou, { feed, stale }, jar] = await Promise.all([
+  const [needsYou, { feed, stale }, jar, owner] = await Promise.all([
     getNeedsYou(),
     loadStatusFeed(),
     cookies(),
+    getOwner(),
   ]);
+  const mode = authMode();
   const now = Date.now();
   const counts = countsByView(needsYou.rows);
 
@@ -34,7 +38,19 @@ export default async function ViewsLayout({
       <SidebarProvider
         defaultOpen={jar.get("sidebar_state")?.value !== "false"}
       >
-        <AppSidebar counts={counts} history={historyEnabled()} />
+        <AppSidebar
+          counts={counts}
+          history={historyEnabled()}
+          signIn={
+            mode && {
+              mode,
+              owner:
+                owner?.via === "nostr"
+                  ? { via: "nostr", npub: npubEncode(owner.pubkey) }
+                  : owner,
+            }
+          }
+        />
         <SidebarInset className="min-w-0">
           <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
             <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-4 sm:px-6">

@@ -18,6 +18,7 @@ describe("readServerEnv", () => {
       buzzPrivateKey: "key",
       buzzAuthTag: undefined,
       buzzOwnerPubkey: undefined,
+      buzzOwnerPubkeys: [],
     });
   });
 
@@ -37,6 +38,16 @@ describe("readServerEnv", () => {
     expect(
       readServerEnv({ ...base, BUZZ_AUTH_TAG: "not json" }).buzzOwnerPubkey,
     ).toBeUndefined();
+  });
+
+  it("reads BUZZ_OWNER_PUBKEY as a comma list, the first one attesting", () => {
+    const env = readServerEnv({
+      BUZZ_RELAY_URL: "wss://relay.example",
+      BUZZ_PRIVATE_KEY: "k",
+      BUZZ_OWNER_PUBKEY: "AA, bb",
+    });
+    expect(env.buzzOwnerPubkey).toBe("aa");
+    expect(env.buzzOwnerPubkeys).toEqual(["aa", "bb"]);
   });
 
   it("treats GITHUB_TOKEN as optional", () => {

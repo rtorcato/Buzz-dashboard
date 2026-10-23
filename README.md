@@ -177,6 +177,9 @@ reach the browser, and an empty value counts as unset. See
 | `BUZZ_PRIVATE_KEY` | Yes | 64-char hex private key of the dashboard's dedicated identity |
 | `BUZZ_OWNER_PUBKEY` | This or `BUZZ_AUTH_TAG` | Hex pubkey of your agents' owner. Defaults to the owner in `BUZZ_AUTH_TAG`, and wins when both are set |
 | `BUZZ_AUTH_TAG` | If the identity isn't a relay member | NIP-OA owner attestation JSON |
+| `AUTH_MODE` | No | Owner sign-in for the dashboard's own writes: `nostr` (NIP-07 extension, allowed keys are `BUZZ_OWNER_PUBKEY`, which may be a comma list) or `proxy`. Unset, sign-in is off and nothing can write. See [Owner sign-in](https://docs.torcato.dev/buzz-dashboard/docs/owner-sign-in) |
+| `AUTH_PROXY_HEADER`, `AUTH_PROXY_SECRET` | With `AUTH_MODE=proxy` | The header your proxy names the user in, and the secret it sends as `X-Buzz-Proxy-Secret`. The user header only counts with that secret |
+| `AUTH_PROXY_USERS` | No | Comma list of proxy users who are the owner. Unset, anyone the proxy lets through is |
 | `GITHUB_TOKEN` | No | Fine-grained, read-only GitHub token. Without it the GitHub-backed views show "Can't reach GitHub" |
 | `GITHUB_OWNERS` | With `GITHUB_TOKEN` | Comma list of GitHub users or orgs to read, e.g. `octo-org,octo-labs`. No default |
 | `GITHUB_TRUSTED_AUTHORS` | No | Comma list of logins whose agent header counts, e.g. `octo-bot,octocat`. Unset trusts nobody, so everything shows as unattributed |

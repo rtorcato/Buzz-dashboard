@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SignInBlock, type SignInState } from "@/components/sign-in";
 import {
   Sidebar,
   SidebarContent,
@@ -51,10 +52,13 @@ const VIEWS: {
 export function AppSidebar({
   counts,
   history,
+  signIn,
 }: {
   counts: Partial<Record<Item, number>>;
   /** True when the history store is configured. */
   history: boolean;
+  /** Null when owner sign-in is off (#40). */
+  signIn: SignInState | null;
 }) {
   const active = usePathname().split("/")[1];
   const { setOpenMobile } = useSidebar();
@@ -152,6 +156,7 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter>
+        {signIn && <SignInBlock state={signIn} />}
         <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground group-data-[collapsible=icon]:justify-center">
           <Eye className="size-4 shrink-0" aria-hidden />
           <span className="group-data-[collapsible=icon]:sr-only">
