@@ -75,7 +75,7 @@ export default async function CostPage({ searchParams }: PageProps<"/cost">) {
   const params = await searchParams;
   const rangeParam = one(params.range);
   const range: CostRange =
-    rangeParam && rangeParam in COST_RANGES
+    rangeParam && Object.hasOwn(COST_RANGES, rangeParam)
       ? (rangeParam as CostRange)
       : DEFAULT_COST_RANGE;
   const unit: CostUnit = one(params.unit) === "tokens" ? "tokens" : "cost";
