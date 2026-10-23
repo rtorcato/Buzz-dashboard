@@ -162,6 +162,13 @@ export function elide(raw: string): string {
   return [`${url.protocol}//${url.host}`, ...path].join("/");
 }
 
+/**
+ * The channel URL as the Alerts tab shows it. Read-only views are public, so
+ * a signed-out viewer gets no part of it: not the host, not a path prefix (#85).
+ */
+export const shownTarget = (raw: string, signedIn: boolean) =>
+  signedIn ? elide(raw) : "Hidden until you sign in";
+
 /** Quiet hours run 10 PM to 8 AM on the server clock. */
 export const isQuietHour = (d: Date) => d.getHours() >= 22 || d.getHours() < 8;
 

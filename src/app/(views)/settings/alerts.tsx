@@ -1,7 +1,13 @@
 import { connection } from "next/server";
 import { AlertSettings } from "@/components/alert-settings";
 import { loadAlerts } from "@/lib/alert-store";
-import { elide, RULE_IDS, type Rule, type RuleId, ruleOf } from "@/lib/alerts";
+import {
+  RULE_IDS,
+  type Rule,
+  type RuleId,
+  ruleOf,
+  shownTarget,
+} from "@/lib/alerts";
 import { authMode, getOwner } from "@/lib/auth";
 import { historyEnabled } from "@/lib/history";
 import { OwnerNote } from "./sources";
@@ -34,7 +40,7 @@ export async function AlertsTab() {
           channels={config.channels.map((c) => ({
             id: c.id,
             type: c.type,
-            target: elide(c.target),
+            target: shownTarget(c.target, owner !== null),
             on: c.on,
           }))}
           rules={rules}
