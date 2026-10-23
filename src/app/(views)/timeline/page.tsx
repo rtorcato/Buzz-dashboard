@@ -10,11 +10,11 @@ import {
   Hexagon,
   type LucideIcon,
   MessageSquare,
-  PlugZap,
   Tag,
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { LocalTime } from "@/components/local-time";
 import { EmptyState, SourceDown } from "@/components/states";
 import { TimelineFilters } from "@/components/timeline-filters";
@@ -233,30 +233,6 @@ function MatchStrip({ days, counts }: { days: number[]; counts: number[] }) {
   );
 }
 
-// No DATABASE_URL: the dashed not-connected box (DESIGN.md → History views).
-function NotConnected() {
-  return (
-    <Card className="gap-4 px-4 sm:px-6">
-      <div className="rounded-lg border border-dashed p-4">
-        <p className="font-medium">Timeline history</p>
-        <p className="text-sm text-muted-foreground">
-          One searchable stream of GitHub and Buzz events, kept for 90 days.
-        </p>
-        <p className="mt-2 font-mono text-xs text-muted-foreground">
-          not connected
-        </p>
-      </div>
-      <Link
-        href="/settings"
-        className={cn(buttonVariants({ variant: "outline" }), "h-9 w-fit")}
-      >
-        <PlugZap aria-hidden />
-        Connect a source
-      </Link>
-    </Card>
-  );
-}
-
 const short = (hex: string) => {
   const npub = npubEncode(hex);
   return `${npub.slice(0, 10)}…${npub.slice(-4)}`;
@@ -265,7 +241,9 @@ const short = (hex: string) => {
 export default async function TimelinePage({
   searchParams,
 }: PageProps<"/timeline">) {
-  if (!historyEnabled()) return <NotConnected />;
+  // DESIGN.md: without a database Timeline leaves the sidebar. "Open on"
+  // can still name it, so land on Agents rather than a 404.
+  if (!historyEnabled()) redirect("/agents");
 
   const params = await searchParams;
   const filters = parseFilters(params);
