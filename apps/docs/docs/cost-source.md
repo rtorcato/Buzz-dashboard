@@ -22,6 +22,7 @@ Each Claude Code agent sends its own token and cost reports straight to the dash
 ```sh
 CLAUDE_CODE_ENABLE_TELEMETRY=1
 OTEL_METRICS_EXPORTER=otlp
+OTEL_LOGS_EXPORTER=otlp
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_EXPORTER_OTLP_ENDPOINT=https://<your dashboard>/otlp
 OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <your ingest token>
@@ -41,11 +42,18 @@ The endpoint (`/otlp/v1/metrics`) takes two Claude Code metrics and ignores the 
 
 It keeps the agent name, the model, the token type and the amount. It doesn't store any other attribute, such as the session id, account or email; it only uses them, hashed, to tell two reports at the same moment apart. Reports older than `HISTORY_RETENTION_DAYS` are deleted with the rest of the history.
 
+The logs endpoint (`/otlp/v1/logs`, from `OTEL_LOGS_EXPORTER=otlp`) feeds Health's error rate. It takes two Claude Code events and drops every other log record:
+
+- `api_request`: one per API request. It keeps the agent, the model and the time.
+- `api_error`: one per failed request. It keeps the agent, the model, the time and the HTTP status code.
+
+It never stores a prompt, a response or an error message. With OpenTelemetry the rate is errors per API request; the owner signer's per-turn reports give errors per turn instead. Leave `OTEL_LOGS_EXPORTER` out and Health shows no error rates for that agent; cost is unaffected.
+
 Claude Code sends delta values by default. Leave `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` unset: the dashboard ignores cumulative reports, since counting them would add the same spend again on every export.
 
 ### The ingest token
 
-- A report without a valid token gets a `401` with no detail. The token only lets an agent post metrics. It can't read anything.
+- A report without a valid token gets a `401` with no detail. The token only lets an agent post metrics and log events. It can't read anything.
 - **Rotate** in Settings → Sources makes a new token and stops the old one at once. Every agent's reports stop until you paste the new token into its environment.
 - If you lose the token, rotate it. It can't be shown again.
 

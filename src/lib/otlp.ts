@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 
 // A minimal OTLP/HTTP protobuf reader for the two Claude Code metrics the
-// Cost view needs (#42): claude_code.cost.usage and claude_code.token.usage.
-// It walks only the fields on that path of ExportMetricsServiceRequest
-// (opentelemetry/proto/collector/metrics/v1) and skips everything else, so
-// there is no protobuf dependency.
+// Cost view needs (#42), claude_code.cost.usage and claude_code.token.usage,
+// and the two log events Health needs (#44), api_request and api_error. It
+// walks only the fields on those paths of ExportMetricsServiceRequest and
+// ExportLogsServiceRequest (opentelemetry/proto/collector/*/v1) and skips
+// everything else, so there is no protobuf dependency.
 
 export type CostPoint = {
   at: Date;
@@ -79,8 +80,9 @@ function fields(buf: Uint8Array): Field[] {
 const text = new TextDecoder();
 const view = (b: Uint8Array) => new DataView(b.buffer, b.byteOffset, 8);
 
-// KeyValue { key = 1; AnyValue value = 2 }, AnyValue { string_value = 1 }.
-// Only string values are kept; Claude Code sends every attribute as one.
+// KeyValue { key = 1; AnyValue value = 2 },
+// AnyValue { string_value = 1; int_value = 3 }. Other value types are dropped;
+// Claude Code sends attributes as strings, and a status code may be an int.
 function attributes(kvs: Field[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const kv of kvs) {
@@ -89,8 +91,8 @@ function attributes(kvs: Field[]): Record<string, string> {
     for (const f of fields(kv.bytes)) {
       if (f.n === 1) key = text.decode(f.bytes);
       if (f.n === 2) {
-        const s = fields(f.bytes).find((v) => v.n === 1);
-        if (s) value = text.decode(s.bytes);
+        const v = fields(f.bytes).find((v) => v.n === 1 || v.n === 3);
+        if (v) value = v.n === 1 ? text.decode(v.bytes) : String(v.int);
       }
     }
     if (key && value !== undefined) out[key] = value;
@@ -163,22 +165,106 @@ function dataPoint(f: Field[]) {
   const time = f.find((x) => x.n === 3);
   const dbl = f.find((x) => x.n === 4);
   const int = f.find((x) => x.n === 6);
-  if (time?.bytes.length !== 8) return null;
+  const ms = time && nanosToMs(time.bytes);
+  if (!ms) return null;
   const value = dbl
     ? view(dbl.bytes).getFloat64(0, true)
     : int
       ? Number(view(int.bytes).getBigInt64(0, true))
       : null;
   if (value === null || !Number.isFinite(value) || value < 0) return null;
-  const t = view(time.bytes);
-  // Nanoseconds as two 32-bit halves; a double keeps far more than ms.
-  const ms = Math.floor(
-    (t.getUint32(4, true) * 2 ** 32 + t.getUint32(0, true)) / 1e6,
-  );
-  if (!ms) return null;
   return {
     at: new Date(ms),
     value,
     attrs: attributes(f.filter((x) => x.n === 7)),
   };
+}
+
+// A fixed64 Unix-nanosecond time as ms, or 0 when unset or malformed.
+function nanosToMs(b: Uint8Array): number {
+  if (b.length !== 8) return 0;
+  const t = view(b);
+  // Nanoseconds as two 32-bit halves; a double keeps far more than ms.
+  return Math.floor(
+    (t.getUint32(4, true) * 2 ** 32 + t.getUint32(0, true)) / 1e6,
+  );
+}
+
+export type ApiEvent = {
+  /** A hash of the record, so a retried export stores nothing new. */
+  id: string;
+  at: Date;
+  agent: string;
+  model: string;
+  kind: "request" | "error";
+  /** The HTTP status of an api_error, when it has one. */
+  status: number | null;
+};
+
+const EVENTS: Record<string, ApiEvent["kind"]> = {
+  api_request: "request",
+  api_error: "error",
+};
+
+/**
+ * The api_request and api_error events in an OTLP ExportLogsServiceRequest
+ * (#44). Every other log record is dropped, and only the agent, model, time
+ * and status code are kept: never a prompt, a response or an error message.
+ */
+export function decodeApiEvents(buf: Uint8Array): ApiEvent[] {
+  const out: ApiEvent[] = [];
+  // ExportLogsServiceRequest { repeated ResourceLogs = 1 }
+  for (const rl of fields(buf)) {
+    if (rl.n !== 1) continue;
+    // ResourceLogs { Resource = 1; repeated ScopeLogs = 2 }
+    const parts = fields(rl.bytes);
+    const res = parts.find((f) => f.n === 1);
+    const resource = res
+      ? attributes(fields(res.bytes).filter((f) => f.n === 1))
+      : {};
+    const agent = resource.agent?.trim() || UNATTRIBUTED;
+    for (const sl of parts) {
+      if (sl.n !== 2) continue;
+      // ScopeLogs { repeated LogRecord log_records = 2 }
+      for (const lr of fields(sl.bytes)) {
+        if (lr.n !== 2) continue;
+        // LogRecord { time_unix_nano = 1 (fixed64); body = 5;
+        // attributes = 6; observed_time_unix_nano = 11; event_name = 12 }
+        const f = fields(lr.bytes);
+        const attrs = attributes(f.filter((x) => x.n === 6));
+        const kind = EVENTS[eventName(f, attrs).replace(/^claude_code\./, "")];
+        if (!kind) continue;
+        const time = f.find((x) => x.n === 1);
+        const observed = f.find((x) => x.n === 11);
+        const ms =
+          (time && nanosToMs(time.bytes)) ||
+          (observed && nanosToMs(observed.bytes));
+        if (!ms) continue;
+        const status = Number(attrs.status_code);
+        out.push({
+          id: seriesKey({ ...attrs, "~agent": agent, "~at": String(ms) }),
+          at: new Date(ms),
+          agent,
+          model: attrs.model ?? "",
+          kind,
+          status:
+            kind === "error" && Number.isInteger(status) && status > 0
+              ? status
+              : null,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+// Claude Code names the event in the `event.name` attribute; newer exporters
+// also fill LogRecord.event_name, and some put it in the body.
+function eventName(f: Field[], attrs: Record<string, string>): string {
+  const named = f.find((x) => x.n === 12);
+  if (named?.bytes.length) return text.decode(named.bytes);
+  if (attrs["event.name"]) return attrs["event.name"];
+  const body = f.find((x) => x.n === 5);
+  const s = body && fields(body.bytes).find((v) => v.n === 1);
+  return s ? text.decode(s.bytes) : "";
 }

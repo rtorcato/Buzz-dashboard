@@ -22,10 +22,13 @@ import {
 } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { FLOW_KINDS } from "./flow";
+import type { HealthBucket } from "./health";
 import {
+  agentEvents,
   costPoints,
   events,
   type HistoryEvent,
+  type NewAgentEvent,
   type NewCostPoint,
   settings,
 } from "./history-schema";
@@ -35,7 +38,7 @@ import {
 // connection. The history views (#41 to #47) read through listEvents and
 // historyStats.
 
-const schema = { events, costPoints, settings };
+const schema = { events, costPoints, agentEvents, settings };
 type Db = DbHandle<typeof schema>["db"];
 
 /** True when DATABASE_URL is set, so the history views and nav show. */
@@ -71,14 +74,15 @@ export async function migrateHistory() {
   });
 }
 
-/** Deletes events and cost points past the retention window; returns how many. */
+/** Deletes rows past the retention window; returns how many. */
 export async function pruneHistory(now = new Date()) {
   const cutoff = new Date(now.getTime() - retentionDays() * 86_400_000);
-  const [res, cost] = await Promise.all([
+  const results = await Promise.all([
     historyDb().delete(events).where(lt(events.at, cutoff)),
     historyDb().delete(costPoints).where(lt(costPoints.at, cutoff)),
+    historyDb().delete(agentEvents).where(lt(agentEvents.at, cutoff)),
   ]);
-  return (res.rowCount ?? 0) + (cost.rowCount ?? 0);
+  return results.reduce((n, r) => n + (r.rowCount ?? 0), 0);
 }
 
 export type EventQuery = {
@@ -358,6 +362,57 @@ export function costByChannel(since: Date) {
     .where(and(gte(costPoints.at, since), isNotNull(costPoints.channel)))
     .groupBy(costPoints.channel)
     .orderBy(sql`2 desc`);
+}
+
+/** Stores Health events (#44); a retried report inserts nothing new. */
+export async function insertAgentEvents(rows: NewAgentEvent[]) {
+  // 7 parameters a row, well under Postgres's 65,535 a statement.
+  for (let i = 0; i < rows.length; i += 5000) {
+    await historyDb()
+      .insert(agentEvents)
+      .values(rows.slice(i, i + 5000))
+      .onConflictDoNothing();
+  }
+}
+
+/** Which of these turn event ids already have a Health row. */
+export async function knownAgentEvents(ids: string[]): Promise<Set<string>> {
+  const known = new Set<string>();
+  for (let i = 0; i < ids.length; i += 10_000) {
+    const rows = await historyDb()
+      .select({ id: agentEvents.id })
+      .from(agentEvents)
+      .where(inArray(agentEvents.id, ids.slice(i, i + 10_000)));
+    for (const r of rows) known.add(r.id);
+  }
+  return known;
+}
+
+/**
+ * Health events since `since` of these kinds, counted per agent, 15-minute
+ * slot, kind and reason. Small even at 7 days: at most 672 slots an agent.
+ */
+export async function healthBuckets(
+  since: Date,
+  kinds: string[],
+): Promise<HealthBucket[]> {
+  const slot = sql<number>`floor(extract(epoch from ${agentEvents.at}) / 900) * 900`;
+  const rows = await historyDb()
+    .select({
+      agent: agentEvents.agent,
+      slot: slot.mapWith(Number),
+      kind: agentEvents.kind,
+      reason: agentEvents.reason,
+      count: count(),
+      last: max(agentEvents.at),
+    })
+    .from(agentEvents)
+    .where(and(gte(agentEvents.at, since), inArray(agentEvents.kind, kinds)))
+    .groupBy(sql`1`, sql`2`, sql`3`, sql`4`);
+  return rows.map((r) => ({
+    ...r,
+    last: r.last ? Math.floor(r.last.getTime() / 1000) : r.slot,
+  }));
 }
 
 export type { HistoryEvent } from "./history-schema";

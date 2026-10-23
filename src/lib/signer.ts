@@ -8,7 +8,7 @@ import {
 import { SimplePool } from "nostr-tools/pool";
 import { generateSecretKey, verifyEvent } from "nostr-tools/pure";
 import { z } from "zod";
-import type { NewCostPoint } from "./history-schema";
+import type { NewAgentEvent, NewCostPoint } from "./history-schema";
 import type { NostrEvent } from "./relay";
 
 // The opt-in owner signer (#43): reads Buzz's per-turn metrics (NIP-AM,
@@ -144,6 +144,7 @@ const TurnSchema = z.object({
   channelId: z.string().nullish(),
   timestamp: z.string(),
   deltaReliable: z.boolean().optional(),
+  stopReason: z.string().nullish(),
   turn: z
     .object({
       inputTokens: count,
@@ -204,4 +205,34 @@ export function turnRows(
   add("tokens", "cacheRead", t.cacheReadTokens);
   add("tokens", "cacheCreation", t.cacheWriteTokens);
   return rows;
+}
+
+const STOP_REASONS = new Set(["end_turn", "max_tokens", "cancelled", "error"]);
+
+/**
+ * The Health row for one decrypted turn (#44), or null when the report
+ * doesn't parse. NIP-AM says to read an unrecognized stopReason as unknown.
+ */
+export function turnEvent(
+  e: NostrEvent,
+  plaintext: string,
+  agent: string,
+): NewAgentEvent | null {
+  let payload: z.infer<typeof TurnSchema>;
+  try {
+    payload = TurnSchema.parse(JSON.parse(plaintext));
+  } catch {
+    return null;
+  }
+  const ms = Date.parse(payload.timestamp);
+  const r = payload.stopReason;
+  return {
+    id: e.id,
+    at: new Date(Number.isNaN(ms) ? e.created_at * 1000 : ms),
+    agent,
+    model: payload.model ?? "",
+    kind: "turn",
+    reason: r == null ? null : STOP_REASONS.has(r) ? r : "unknown",
+    status: null,
+  };
 }

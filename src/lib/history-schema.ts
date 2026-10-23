@@ -1,6 +1,7 @@
 import {
   doublePrecision,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -81,6 +82,29 @@ export const costPoints = pgTable(
 );
 
 export type NewCostPoint = typeof costPoints.$inferInsert;
+
+// Health (#44): one row per API request or failed request from Claude Code
+// OpenTelemetry logs, or per turn from the owner signer's reports (#43). Only
+// what the rates need; never a prompt, a response or an error message.
+export const agentEvents = pgTable(
+  "agent_events",
+  {
+    /** A hash of the OTel log record, or the turn report's event id. */
+    id: text("id").primaryKey(),
+    at: timestamp("at", { withTimezone: true }).notNull(),
+    agent: text("agent").notNull(),
+    model: text("model").notNull(),
+    /** "request" or "error" from OTel, "turn" from the owner signer. */
+    kind: text("kind").notNull(),
+    /** A turn's NIP-AM stopReason: end_turn, max_tokens, cancelled, error or unknown. */
+    reason: text("reason"),
+    /** An OTel api_error's HTTP status code. */
+    status: integer("status"),
+  },
+  (t) => [index("agent_events_at_idx").on(t.at)],
+);
+
+export type NewAgentEvent = typeof agentEvents.$inferInsert;
 
 // The dashboard's own state that only the owner changes (#40), as key/value.
 export const settings = pgTable("settings", {

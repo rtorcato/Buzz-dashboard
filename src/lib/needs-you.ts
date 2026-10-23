@@ -1,16 +1,30 @@
 import { connection } from "next/server";
 import { type GitHub, loadGitHub } from "./github";
+import type { FailingAgent, HealthSource } from "./health";
+import { loadFailing } from "./health-data";
 import { loadHive } from "./hive";
 import { sampleMergeRow, sampleMode } from "./sample-data";
 import { loadStatusFeed, type StatusFeed } from "./status-feed";
 import { trippedDetail, usageState } from "./usage";
 
-export const VIEWS = ["agents", "pipeline", "releases", "timeline"] as const;
+export const VIEWS = [
+  "agents",
+  "health",
+  "pipeline",
+  "releases",
+  "timeline",
+] as const;
 export type View = (typeof VIEWS)[number];
 
 // The things that need the owner. A deployment whose merge bot handles
 // merge-ready hides that row with NEEDS_YOU_EXCLUDE_LABELS=merge-ready.
-export type NeedsYouKind = "release" | "ci" | "blocked" | "merge" | "paused";
+export type NeedsYouKind =
+  | "release"
+  | "ci"
+  | "blocked"
+  | "merge"
+  | "paused"
+  | "failing";
 
 export const KIND_VIEW: Record<NeedsYouKind, View> = {
   release: "releases",
@@ -19,9 +33,11 @@ export const KIND_VIEW: Record<NeedsYouKind, View> = {
   merge: "pipeline",
   // Usage has no tab of its own.
   paused: "agents",
+  failing: "health",
 };
 
-// One row per item type, e.g. "2 releases waiting for your approval".
+// One row per item type, e.g. "2 releases waiting for your approval", except
+// "failing", which has one row per failing agent.
 export type NeedsYouRow = {
   kind: NeedsYouKind;
   title: string;
@@ -127,6 +143,25 @@ export function mergeRow(github: GitHub) {
   } satisfies NeedsYouRow;
 }
 
+/** The "Agent failing turns" row for one agent (DESIGN.md → Shell). */
+export function failingRow(f: FailingAgent, source: HealthSource) {
+  const { attempts, errors } = f.hour;
+  return {
+    kind: "failing",
+    // With OTel the rate is per API request, never per turn.
+    title:
+      source === "signer"
+        ? `${f.agent} is failing turns`
+        : `${f.agent} is failing API requests`,
+    detail:
+      source === "signer"
+        ? `${errors} of ${attempts} turns ended in error in the last hour`
+        : `${errors} of ${attempts} API requests failed in the last hour`,
+    count: 1,
+    since: new Date(f.since * 1000).toISOString(),
+  } satisfies NeedsYouRow;
+}
+
 // A cold GitHub read takes about 20s. The card doesn't hold every page for it;
 // the read carries on and the next request shows the row.
 const GITHUB_WAIT_MS = 2_000;
@@ -188,7 +223,16 @@ export async function getNeedsYou(): Promise<NeedsYou> {
       });
     }
   }
-  // ponytail: only the usage pause and merge-ready are read so far. The
+  try {
+    const health = await loadFailing(Math.floor(Date.now() / 1000));
+    if (health)
+      rows.push(...health.failing.map((f) => failingRow(f, health.source)));
+  } catch (err) {
+    // Like the cost chip: a database outage shows on Health, not every page.
+    console.error("Needs you, Health:", err);
+  }
+  // ponytail: only the usage pause, merge-ready and failing agents are read
+  // so far. The
   // Pipeline PR adds ai-blocked issues and the Releases PR adds release
   // approvals and red CI on main. Until then the card stays disconnected
   // rather than a stubbed "All clear", but still lists the rows it can see.
