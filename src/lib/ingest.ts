@@ -1,6 +1,7 @@
 import "server-only";
 
 import { and, eq, max } from "drizzle-orm";
+import { runAlerts } from "./alert-store";
 import { loadSignerRecord } from "./cost-source";
 import { readServerEnv } from "./env";
 import { type GitHub, readGitHub } from "./github";
@@ -355,6 +356,21 @@ export async function startHistory() {
     }
   };
   setInterval(readTurns, INTERVAL_MS).unref();
+
+  // Alerts (#45) on their own too, so a slow channel never holds up ingest.
+  let alerting = false;
+  const sendAlerts = async () => {
+    if (alerting || !migrated) return;
+    alerting = true;
+    try {
+      await runAlerts();
+    } catch (err) {
+      console.error(`Alerts: ${message(err)}`);
+    } finally {
+      alerting = false;
+    }
+  };
+  setInterval(sendAlerts, INTERVAL_MS).unref();
 }
 
 const message = (err: unknown) =>

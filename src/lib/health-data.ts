@@ -17,11 +17,15 @@ export async function healthSource(): Promise<HealthSource | null> {
   return (await ingestTokenRecord()) ? "otel" : null;
 }
 
-/** The agents failing right now, for Needs you; null without a source. */
+/**
+ * The agents failing right now, for Needs you; null without a source. Outside
+ * a request (the alerts pass) the caller passes the source in.
+ */
 export async function loadFailing(
   now: number,
+  given?: HealthSource | null,
 ): Promise<{ source: HealthSource; failing: FailingAgent[] } | null> {
-  const source = await healthSource();
+  const source = given === undefined ? await healthSource() : given;
   if (!source) return null;
   // The last hour, plus the slot it starts in.
   const buckets = await healthBuckets(

@@ -5,17 +5,24 @@ import { SettingsForm } from "@/components/settings-form";
 import { loadHive } from "@/lib/hive";
 import { loadStatusFeed } from "@/lib/status-feed";
 import pkg from "../../../../package.json";
+import { AlertsTab } from "./alerts";
 import { SourcesTab } from "./sources";
 
 export const metadata: Metadata = { title: "Settings · Hive" };
 
 // DESIGN.md → Settings tabs. Links, not client tabs, like Pipeline's Now /
-// Flow, so Sources is a server render with its own URL. Alerts comes with
-// #45.
-function SettingsTabs({ sources }: { sources: boolean }) {
+// Flow, so Alerts and Sources are server renders with their own URLs.
+type Tab = "general" | "alerts" | "sources";
+
+function SettingsTabs({ tab }: { tab: Tab }) {
   const tabs = [
-    { label: "General", href: "/settings", active: !sources },
-    { label: "Sources", href: "/settings?tab=sources", active: sources },
+    { label: "General", href: "/settings", active: tab === "general" },
+    { label: "Alerts", href: "/settings?tab=alerts", active: tab === "alerts" },
+    {
+      label: "Sources",
+      href: "/settings?tab=sources",
+      active: tab === "sources",
+    },
   ];
   return (
     <nav
@@ -44,21 +51,28 @@ export default async function SettingsPage({
   searchParams,
 }: PageProps<"/settings">) {
   const params = await searchParams;
-  const sources = params.tab === "sources";
+  const tab: Tab =
+    params.tab === "sources" || params.tab === "alerts"
+      ? params.tab
+      : "general";
   const [{ hive }, { feed }] = await Promise.all([
-    loadHive(),
-    sources ? { feed: null } : loadStatusFeed(),
+    tab === "alerts" ? { hive: null } : loadHive(),
+    tab === "general" ? loadStatusFeed() : { feed: null },
   ]);
   // Same roster as the Agents view: one entry per live agent, no messages.
   const agents = (hive?.agents ?? [])
     .filter((a) => a.lastSeenAt !== null)
     .map((a) => ({ ...a, messages: [] }));
   return (
-    <div className={cn("space-y-6", sources ? "max-w-4xl" : "max-w-2xl")}>
+    <div
+      className={cn("space-y-6", tab === "general" ? "max-w-2xl" : "max-w-4xl")}
+    >
       <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-      <SettingsTabs sources={sources} />
-      {sources ? (
+      <SettingsTabs tab={tab} />
+      {tab === "sources" ? (
         <SourcesTab agents={agents} showAll={params.agents === "all"} />
+      ) : tab === "alerts" ? (
+        <AlertsTab />
       ) : (
         <SettingsForm
           agents={agents}

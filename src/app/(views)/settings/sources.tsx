@@ -21,7 +21,7 @@ import { SignInButton } from "@/components/sign-in";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { formatAge } from "@/lib/age";
-import { authMode, getOwner } from "@/lib/auth";
+import { type AuthMode, authMode, getOwner, type Owner } from "@/lib/auth";
 import { COST_DOCS, formatTokens } from "@/lib/cost";
 import { ingestTokenRecord, signerRecord } from "@/lib/cost-source";
 import { readServerEnv } from "@/lib/env";
@@ -156,29 +156,7 @@ export async function SourcesTab({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm text-muted-foreground">
-        <Lock className="size-4 shrink-0" aria-hidden />
-        <p className="flex-1">
-          Only the owner can change sources
-          {owner && (
-            <>
-              {" "}
-              · signed in as{" "}
-              {owner.via === "nostr" ? (
-                <span className="font-mono">
-                  {short(npubEncode(owner.pubkey))}
-                </span>
-              ) : (
-                owner.user
-              )}
-            </>
-          )}
-          {!owner &&
-            !mode &&
-            " · owner sign-in is off (set AUTH_MODE, and AUTH_PUBLIC_URL for nostr)"}
-        </p>
-        {!owner && mode === "nostr" && <SignInButton />}
-      </div>
+      <OwnerNote what="sources" owner={owner} mode={mode} />
 
       <Card className="gap-0 py-0">
         <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6">
@@ -317,6 +295,43 @@ export async function SourcesTab({
           GitHub.
         </p>
       </Card>
+    </div>
+  );
+}
+
+/** "Only the owner can change …", with who is signed in or a sign-in button. */
+export function OwnerNote({
+  what,
+  owner,
+  mode,
+}: {
+  what: string;
+  owner: Owner | null;
+  mode: AuthMode | null;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm text-muted-foreground">
+      <Lock className="size-4 shrink-0" aria-hidden />
+      <p className="flex-1">
+        Only the owner can change {what}
+        {owner && (
+          <>
+            {" "}
+            · signed in as{" "}
+            {owner.via === "nostr" ? (
+              <span className="font-mono">
+                {short(npubEncode(owner.pubkey))}
+              </span>
+            ) : (
+              owner.user
+            )}
+          </>
+        )}
+        {!owner &&
+          !mode &&
+          " · owner sign-in is off (set AUTH_MODE, and AUTH_PUBLIC_URL for nostr)"}
+      </p>
+      {!owner && mode === "nostr" && <SignInButton />}
     </div>
   );
 }

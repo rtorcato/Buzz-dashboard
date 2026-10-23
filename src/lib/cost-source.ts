@@ -83,14 +83,20 @@ export async function selectOtel() {
   clearOtlpToken();
 }
 
+/** The stored ingest token, or null. Not per request: the alerts pass reads it too. */
+export async function loadIngestTokenRecord(): Promise<TokenRecord | null> {
+  if (!historyEnabled()) return null;
+  const parsed = TokenRecordSchema.safeParse(await getSetting(TOKEN_KEY));
+  return parsed.success ? parsed.data : null;
+}
+
 /** The stored ingest token, or null without one or without a database. */
 export const ingestTokenRecord = cache(
   async (): Promise<TokenRecord | null> => {
     if (!historyEnabled()) return null;
     // Per request, never at build time: the token can change at any moment.
     await connection();
-    const parsed = TokenRecordSchema.safeParse(await getSetting(TOKEN_KEY));
-    return parsed.success ? parsed.data : null;
+    return loadIngestTokenRecord();
   },
 );
 
