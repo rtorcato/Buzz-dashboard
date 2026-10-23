@@ -15,7 +15,7 @@ export const TYPES = {
 export type EventType = keyof typeof TYPES;
 
 export const RANGES = {
-  "1d": { label: "Last 24 hours", days: 1 },
+  "1d": { label: "Today", days: 1 },
   "7d": { label: "Last 7 days", days: 7 },
   "14d": { label: "Last 14 days", days: 14 },
   "30d": { label: "Last 30 days", days: 30 },
