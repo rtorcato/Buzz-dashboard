@@ -367,6 +367,9 @@ pnpm db:migrate    # apply migrations by hand (the server also does it on start)
 pnpm db:studio     # browse the store in Drizzle Studio
 ```
 
+Commit the migration in the same change as the schema edit. CI runs
+`pnpm db:generate` and fails if anything under `drizzle/` changes.
+
 `pnpm-workspace.yaml` sets `verifyDepsBeforeRun: install`, so `pnpm dev` and
 the other scripts reinstall first when `node_modules` is behind the lockfile.
 
