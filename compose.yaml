@@ -9,3 +9,32 @@ services:
       - "127.0.0.1:3000:3000"
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+
+  # Optional history store (#39). Not started by a plain `docker compose up`:
+  # run `docker compose up -d postgres` on its own for `pnpm dev`, or
+  # `docker compose --profile history up -d` for both. The dashboard doesn't
+  # wait for it; without DATABASE_URL it never connects.
+  postgres:
+    image: postgres:18-alpine
+    profiles: [history]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_DB: hive
+      # Local dev default. Set POSTGRES_PASSWORD in the shell or a .env file
+      # next to this one for anything reachable beyond this machine.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hive}
+    # Loopback only, like the dashboard.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - hive-history:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d hive"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  hive-history:

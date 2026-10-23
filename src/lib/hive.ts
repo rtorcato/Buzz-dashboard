@@ -299,7 +299,10 @@ const RELAY_CAP = 1000;
 const MAX_PAGES = 10;
 
 /** Every event matching one filter, paging back with `until` past the cap. */
-async function queryAll(env: ServerEnv, filter: Filter): Promise<NostrEvent[]> {
+export async function queryAll(
+  env: ServerEnv,
+  filter: Filter,
+): Promise<NostrEvent[]> {
   const seen = new Map<string, NostrEvent>();
   let until: number | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
