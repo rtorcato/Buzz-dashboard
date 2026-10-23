@@ -1,5 +1,7 @@
 import {
+  AlarmClock,
   ArrowRight,
+  BellOff,
   BellRing,
   Check,
   ChevronRight,
@@ -8,6 +10,7 @@ import {
   GitMerge,
   HeartPulse,
   Info,
+  LogIn,
   type LucideIcon,
   OctagonAlert,
   PlugZap,
@@ -15,12 +18,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { LocalTime } from "@/components/local-time";
+import { SnoozeMenu } from "@/components/snooze-menu";
 import { Card } from "@/components/ui/card";
 import { formatAge } from "@/lib/age";
+import { type Mutes, rowMute } from "@/lib/alerts";
 import {
   KIND_VIEW,
   type NeedsYou,
   type NeedsYouKind,
+  type NeedsYouRow,
   oldestFirst,
 } from "@/lib/needs-you";
 
@@ -54,7 +60,19 @@ const KIND: Record<NeedsYouKind, { icon: LucideIcon; tone: string }> = {
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
-export function NeedsYouCard({ data, now }: { data: NeedsYou; now: number }) {
+export function NeedsYouCard({
+  data,
+  now,
+  snooze,
+}: {
+  data: NeedsYou;
+  now: number;
+  /**
+   * Snooze and ack (#46), with the history store only. `canEdit` is the
+   * signed-in owner; `signIn` says sign-in is on, so the hint can show.
+   */
+  snooze: { mutes: Mutes; canEdit: boolean; signIn: boolean } | null;
+}) {
   // Rows a live source did report still show while the rest are disconnected.
   if (!data.connected && data.rows.length === 0) {
     return (
@@ -91,6 +109,15 @@ export function NeedsYouCard({ data, now }: { data: NeedsYou; now: number }) {
     );
   }
 
+  const rows = oldestFirst(data.rows).map((row) => ({
+    row,
+    mute: row.keys && snooze ? rowMute(row.keys, snooze.mutes, now) : null,
+  }));
+  const snoozed = rows.flatMap((r) => (r.mute?.until ? [r.mute.until] : []));
+  const acked = rows.filter((r) => r.mute && r.mute.until === null).length;
+  const canSnooze = (row: NeedsYouRow) =>
+    Boolean(row.keys?.length && snooze?.canEdit);
+
   return (
     <Card className="gap-0 py-0">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-6">
@@ -101,27 +128,37 @@ export function NeedsYouCard({ data, now }: { data: NeedsYou; now: number }) {
             {data.rows.length}
           </span>
         </h2>
-        <span className="hidden text-sm text-muted-foreground sm:inline">
+        <span className="hidden items-center gap-3 text-sm text-muted-foreground sm:flex">
+          {snooze?.signIn &&
+            !snooze.canEdit &&
+            data.rows.some((r) => r.keys?.length) && (
+              <span className="hidden items-center gap-1.5 md:inline-flex">
+                <LogIn className="size-3.5" aria-hidden />
+                Sign in to snooze or acknowledge
+              </span>
+            )}
           Oldest first
         </span>
       </div>
       <ul className="divide-y">
-        {oldestFirst(data.rows).map((row) => {
+        {rows.map(({ row, mute }) => {
           const { icon: Icon, tone } = KIND[row.kind];
           const view = KIND_VIEW[row.kind];
+          // A snoozed or muted row keeps its place, dimmed.
+          const dim = mute ? "opacity-[.62]" : "";
           return (
-            <li key={`${row.kind}:${row.title}`}>
+            <li key={`${row.kind}:${row.title}`} className="flex items-center">
               <Link
                 href={`/${view}`}
-                className="flex min-h-11 items-center gap-3 px-4 py-3 outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-6"
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-3 px-4 py-3 outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-6"
               >
                 <span
-                  className={`flex size-9 shrink-0 items-center justify-center rounded-full border ${tone}`}
+                  className={`flex size-9 shrink-0 items-center justify-center rounded-full border ${tone} ${dim}`}
                 >
                   <Icon className="size-4" aria-hidden />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{row.title}</p>
+                  <p className={`font-medium ${dim}`}>{row.title}</p>
                   <p className="truncate text-sm text-muted-foreground">
                     {row.detail}
                     {row.kind !== "paused" ? (
@@ -154,10 +191,35 @@ export function NeedsYouCard({ data, now }: { data: NeedsYou; now: number }) {
                   aria-hidden
                 />
               </Link>
+              {canSnooze(row) && (
+                <SnoozeMenu keys={row.keys ?? []} title={row.title} />
+              )}
             </li>
           );
         })}
       </ul>
+      {(snoozed.length > 0 || acked > 0) && (
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-4 py-2.5 text-sm text-muted-foreground sm:px-6">
+          {snoozed.length > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <AlarmClock className="size-3.5" aria-hidden />
+              {snoozed.length} snoozed
+              {snoozed.length === 1 && (
+                <>
+                  {" until "}
+                  <LocalTime at={snoozed[0] / 1000} />
+                </>
+              )}
+            </span>
+          )}
+          {acked > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <BellOff className="size-3.5" aria-hidden />
+              {acked} muted until it changes
+            </span>
+          )}
+        </p>
+      )}
       <HeadsUp lines={data.headsUp} footer />
     </Card>
   );

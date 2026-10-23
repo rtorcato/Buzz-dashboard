@@ -185,6 +185,60 @@ export const AlertStateSchema = z.record(
 );
 
 /**
+ * Snooze and ack (#46), per item key: alerts stop until `until` (ms), or
+ * until the item clears when it's null. A new item, e.g. one more merge-ready
+ * PR, has its own key, so it still alerts: that is "it gets worse".
+ */
+export type Mutes = Record<string, { until: number | null }>;
+
+export const MutesSchema = z.record(
+  z.string(),
+  z.object({ until: z.number().nullable() }),
+);
+
+/** The longest snooze the menu offers is "until tomorrow". */
+export const MAX_SNOOZE_MS = 48 * 3_600_000;
+
+export const isMuted = (mutes: Mutes, key: string, now: number) => {
+  const m = mutes[key];
+  return m !== undefined && (m.until === null || m.until > now);
+};
+
+/**
+ * The mutes still in force: the snooze hasn't run out and the item is still
+ * in `keys`. Null `keys` (a source didn't answer) keeps every unexpired one,
+ * so an outage doesn't wipe the acks.
+ */
+export function liveMutes(
+  mutes: Mutes,
+  keys: string[] | null,
+  now: number,
+): Mutes {
+  const current = keys && new Set(keys);
+  const live: Mutes = {};
+  for (const [key, m] of Object.entries(mutes)) {
+    if (isMuted(mutes, key, now) && (!current || current.has(key))) {
+      live[key] = m;
+    }
+  }
+  return live;
+}
+
+/**
+ * A Needs you row's snooze: set only when every item in it is muted. It runs
+ * until the first of them comes back; null `until` means all are acked.
+ */
+export function rowMute(
+  keys: string[],
+  mutes: Mutes,
+  now: number,
+): { until: number | null } | null {
+  if (!keys.length || !keys.every((k) => isMuted(mutes, k, now))) return null;
+  const untils = keys.flatMap((k) => mutes[k].until ?? []);
+  return { until: untils.length ? Math.min(...untils) : null };
+}
+
+/**
  * The items due to go out now, and the state with every current item in it.
  * An item that cleared drops out, so it starts over if it comes back. The
  * caller marks `sent` on the items it delivered.
@@ -194,6 +248,7 @@ export function dueAlerts(
   prev: AlertState,
   items: Item[],
   now: number,
+  mutes: Mutes = {},
 ): { due: { item: Item; channels: Channel[] }[]; state: AlertState } {
   const state: AlertState = {};
   const due: { item: Item; channels: Channel[] }[] = [];
@@ -203,7 +258,7 @@ export function dueAlerts(
     state[item.key] = s;
     const meta = RULES[item.rule];
     const rule = ruleOf(config, item.rule);
-    if (!rule.on) continue;
+    if (!rule.on || isMuted(mutes, item.key, now)) continue;
     const waitMs = meta.knob === "hours" ? rule.value * 3_600_000 : 0;
     if (now - s.first < waitMs) continue;
     if (s.sent !== null) {
