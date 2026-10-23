@@ -15,8 +15,10 @@ export type ServerEnv = {
   // authenticate when its AUTH event carries this tag.
   buzzAuthTag?: string;
   // Only profiles this owner attested count as agents. Defaults to the owner
-  // named in BUZZ_AUTH_TAG.
+  // named in BUZZ_AUTH_TAG. The first key of BUZZ_OWNER_PUBKEY.
   buzzOwnerPubkey?: string;
+  // Every BUZZ_OWNER_PUBKEY key (a comma list), each allowed to sign in (#40).
+  buzzOwnerPubkeys: string[];
 };
 
 // Empty strings count as unset, as they always have here.
@@ -41,14 +43,17 @@ export function readServerEnv(
   source: Record<string, string | undefined> = process.env,
 ): ServerEnv {
   const env = checkEnv(EnvSchema, source);
+  const owners = (env.BUZZ_OWNER_PUBKEY || tagOwner(env.BUZZ_AUTH_TAG) || "")
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((k) => k.toLowerCase());
   return {
     githubToken: env.GITHUB_TOKEN,
     buzzRelayUrl: env.BUZZ_RELAY_URL,
     buzzPrivateKey: env.BUZZ_PRIVATE_KEY,
     buzzAuthTag: env.BUZZ_AUTH_TAG,
-    buzzOwnerPubkey: (
-      env.BUZZ_OWNER_PUBKEY || tagOwner(env.BUZZ_AUTH_TAG)
-    )?.toLowerCase(),
+    buzzOwnerPubkey: owners[0],
+    buzzOwnerPubkeys: owners,
   };
 }
 
