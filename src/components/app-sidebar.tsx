@@ -43,7 +43,7 @@ const VIEWS: {
   { view: "agents", label: "Agents", icon: Bot },
   { view: "pipeline", label: "Pipeline", icon: GitPullRequest },
   { view: "releases", label: "Releases", icon: Rocket },
-  { view: "timeline", label: "Timeline", icon: Activity, history: true },
+  { view: "timeline", label: "Timeline", icon: Activity },
   { view: "media", label: "Media", icon: Images },
 ];
 

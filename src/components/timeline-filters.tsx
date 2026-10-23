@@ -64,15 +64,18 @@ function FilterSelect({
 }
 
 // DESIGN.md → Timeline → Search card. Every control writes the URL, so a
-// search is a link and the server does the querying.
+// search is a link and the server does the querying. `live` (no database,
+// #53) keeps only the agent and type filters.
 export function TimelineFilters({
   filters,
   repos,
   agents,
+  live = false,
 }: {
   filters: Filters;
   repos: string[];
   agents: string[];
+  live?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -91,11 +94,12 @@ export function TimelineFilters({
         e.metaKey ||
         e.ctrlKey ||
         e.altKey ||
-        t?.closest("input, textarea, select, [contenteditable=true]")
+        t?.closest("input, textarea, select, [contenteditable=true]") ||
+        !input.current
       )
         return;
       e.preventDefault();
-      input.current?.focus();
+      input.current.focus();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -113,63 +117,67 @@ export function TimelineFilters({
 
   return (
     <div className="space-y-3">
-      <search>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            set("q", q.trim() || null);
-          }}
-          className="relative"
-        >
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            ref={input}
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search messages, issues, PRs and labels"
-            aria-label="Search the timeline"
-            className="h-11 pr-20 pl-9 [&::-webkit-search-cancel-button]:hidden"
-          />
-          <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
-            {q && (
-              <button
-                type="button"
-                onClick={() => {
-                  setQ("");
-                  set("q", null);
-                }}
-                className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label="Clear search"
-              >
-                <X className="size-4" aria-hidden />
-              </button>
-            )}
-            <kbd
-              className="hidden h-5 min-w-5 items-center justify-center rounded border px-1 font-mono text-xs text-muted-foreground md:flex"
+      {!live && (
+        <search>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              set("q", q.trim() || null);
+            }}
+            className="relative"
+          >
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden
-            >
-              /
-            </kbd>
-          </div>
-        </form>
-      </search>
+            />
+            <Input
+              ref={input}
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search messages, issues, PRs and labels"
+              aria-label="Search the timeline"
+              className="h-11 pr-20 pl-9 [&::-webkit-search-cancel-button]:hidden"
+            />
+            <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
+              {q && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQ("");
+                    set("q", null);
+                  }}
+                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Clear search"
+                >
+                  <X className="size-4" aria-hidden />
+                </button>
+              )}
+              <kbd
+                className="hidden h-5 min-w-5 items-center justify-center rounded border px-1 font-mono text-xs text-muted-foreground md:flex"
+                aria-hidden
+              >
+                /
+              </kbd>
+            </div>
+          </form>
+        </search>
+      )}
 
       {/* On phones the row scrolls sideways in one line. */}
       <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 md:flex-wrap md:overflow-visible">
-        <FilterSelect
-          label="Repo"
-          icon={Folder}
-          items={[
-            { value: ALL, label: "All repos" },
-            ...repos.map((r) => ({ value: r, label: r, mono: true })),
-          ]}
-          value={filters.repo ?? ALL}
-          onChange={(v) => set("repo", v)}
-        />
+        {!live && (
+          <FilterSelect
+            label="Repo"
+            icon={Folder}
+            items={[
+              { value: ALL, label: "All repos" },
+              ...repos.map((r) => ({ value: r, label: r, mono: true })),
+            ]}
+            value={filters.repo ?? ALL}
+            onChange={(v) => set("repo", v)}
+          />
+        )}
         <FilterSelect
           label="Agent"
           items={[
@@ -179,17 +187,19 @@ export function TimelineFilters({
           value={filters.agent ?? ALL}
           onChange={(v) => set("agent", v)}
         />
-        <FilterSelect
-          label="Source"
-          icon={Layers2}
-          items={[
-            { value: ALL, label: "GitHub + Buzz" },
-            { value: "github", label: "GitHub" },
-            { value: "buzz", label: "Buzz" },
-          ]}
-          value={filters.source ?? ALL}
-          onChange={(v) => set("source", v)}
-        />
+        {!live && (
+          <FilterSelect
+            label="Source"
+            icon={Layers2}
+            items={[
+              { value: ALL, label: "GitHub + Buzz" },
+              { value: "github", label: "GitHub" },
+              { value: "buzz", label: "Buzz" },
+            ]}
+            value={filters.source ?? ALL}
+            onChange={(v) => set("source", v)}
+          />
+        )}
         <ToggleGroup
           variant="outline"
           aria-label="Event type"
@@ -214,16 +224,18 @@ export function TimelineFilters({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        <FilterSelect
-          label="Range"
-          icon={Calendar}
-          items={Object.entries(RANGES).map(([value, r]) => ({
-            value,
-            label: r.label,
-          }))}
-          value={filters.range}
-          onChange={(v) => set("range", v === DEFAULT_RANGE ? null : v)}
-        />
+        {!live && (
+          <FilterSelect
+            label="Range"
+            icon={Calendar}
+            items={Object.entries(RANGES).map(([value, r]) => ({
+              value,
+              label: r.label,
+            }))}
+            value={filters.range}
+            onChange={(v) => set("range", v === DEFAULT_RANGE ? null : v)}
+          />
+        )}
       </div>
     </div>
   );
