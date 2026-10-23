@@ -6,6 +6,7 @@ import {
   CirclePause,
   CircleX,
   GitMerge,
+  HeartPulse,
   Info,
   type LucideIcon,
   OctagonAlert,
@@ -44,6 +45,10 @@ const KIND: Record<NeedsYouKind, { icon: LucideIcon; tone: string }> = {
   paused: {
     icon: CirclePause,
     tone: "border-warning/25 bg-warning/10 text-warning",
+  },
+  failing: {
+    icon: HeartPulse,
+    tone: "border-destructive/20 bg-destructive/10 text-destructive",
   },
 };
 
@@ -105,7 +110,7 @@ export function NeedsYouCard({ data, now }: { data: NeedsYou; now: number }) {
           const { icon: Icon, tone } = KIND[row.kind];
           const view = KIND_VIEW[row.kind];
           return (
-            <li key={row.kind}>
+            <li key={`${row.kind}:${row.title}`}>
               <Link
                 href={`/${view}`}
                 className="flex min-h-11 items-center gap-3 px-4 py-3 outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 sm:px-6"

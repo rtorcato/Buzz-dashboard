@@ -6,7 +6,9 @@ import { readServerEnv } from "./env";
 import { type GitHub, readGitHub } from "./github";
 import {
   historyDb,
+  insertAgentEvents,
   insertCostPoints,
+  knownAgentEvents,
   knownSeries,
   migrateHistory,
   newestCostPoint,
@@ -15,6 +17,7 @@ import {
 } from "./history";
 import {
   events,
+  type NewAgentEvent,
   type NewCostPoint,
   type NewHistoryEvent,
 } from "./history-schema";
@@ -30,6 +33,7 @@ import {
   REQUEST_MS,
   type SignerRecord,
   TURN_KIND,
+  turnEvent,
   turnRows,
   withTimeout,
 } from "./signer";
@@ -211,10 +215,15 @@ export async function ingestTurns(record: SignerRecord): Promise<number> {
         ),
     );
     const turns = found.filter((e) => isTurnFor(e, record.pubkey));
-    const known = await knownSeries(turns.map((e) => e.id));
+    const ids = turns.map((e) => e.id);
+    // A turn with no usage stores no cost rows, only its Health row (#44).
+    const [known, health] = await Promise.all([
+      knownSeries(ids),
+      knownAgentEvents(ids),
+    ]);
     // Oldest first, so a capped pass leaves only newer turns for the next.
     const fresh = turns
-      .filter((e) => !known.has(e.id))
+      .filter((e) => !known.has(e.id) && !health.has(e.id))
       .sort((a, b) => a.created_at - b.created_at)
       .slice(0, MAX_TURNS);
     if (!fresh.length) return 0;
@@ -230,6 +239,7 @@ export async function ingestTurns(record: SignerRecord): Promise<number> {
     let stored = 0;
     for (let i = 0; i < fresh.length; i += PARALLEL) {
       const rows: NewCostPoint[] = [];
+      const turnEvents: NewAgentEvent[] = [];
       const batch = fresh.slice(i, i + PARALLEL);
       const plain = await Promise.allSettled(
         batch.map((e) =>
@@ -242,10 +252,13 @@ export async function ingestTurns(record: SignerRecord): Promise<number> {
         if (p.status !== "fulfilled") return;
         const agent = names.get(e.pubkey) ?? npubEncode(e.pubkey);
         const r = turnRows(e, p.value, agent);
-        if (r.length) stored++;
+        const t = turnEvent(e, p.value, agent);
+        if (r.length || t) stored++;
         rows.push(...r);
+        if (t) turnEvents.push(t);
       });
       await insertCostPoints(rows);
+      await insertAgentEvents(turnEvents);
     }
     return stored;
   } finally {

@@ -6,6 +6,7 @@ import {
   Coins,
   Eye,
   GitPullRequest,
+  HeartPulse,
   Images,
   type LucideIcon,
   Rocket,
@@ -43,6 +44,7 @@ const VIEWS: {
   history?: true;
 }[] = [
   { view: "agents", label: "Agents", icon: Bot },
+  { view: "health", label: "Health", icon: HeartPulse, history: true },
   { view: "pipeline", label: "Pipeline", icon: GitPullRequest },
   { view: "releases", label: "Releases", icon: Rocket },
   { view: "timeline", label: "Timeline", icon: Activity },

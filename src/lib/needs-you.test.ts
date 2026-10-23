@@ -5,6 +5,7 @@ import {
   configFailures,
   countsByView,
   excludedLabels,
+  failingRow,
   getNeedsYou,
   mergeRow,
   type NeedsYouRow,
@@ -22,6 +23,8 @@ const loadStatusFeed = vi.hoisted(() =>
 vi.mock("./status-feed", () => ({ loadStatusFeed }));
 const loadGitHub = vi.hoisted(() => vi.fn());
 vi.mock("./github", () => ({ loadGitHub }));
+const loadFailing = vi.hoisted(() => vi.fn(async () => null));
+vi.mock("./health-data", () => ({ loadFailing }));
 
 const T = (iso: string) => Date.parse(iso) / 1000;
 const feed = (usage: StatusFeed["usage"]): StatusFeed => ({
@@ -301,5 +304,37 @@ describe("formatAge", () => {
     [50 * 3_600_000, "2d"],
   ])("%i ms -> %s", (ms, out) => {
     expect(formatAge(ms)).toBe(out);
+  });
+});
+
+describe("failingRow", () => {
+  const f = {
+    agent: "Gale",
+    hour: { attempts: 14, errors: 6, cancelled: 0, maxTokens: 0 },
+    since: T("2026-10-16T19:08:00Z"),
+  };
+
+  it("says turns for per-turn reports", () => {
+    expect(failingRow(f, "signer")).toEqual({
+      kind: "failing",
+      title: "Gale is failing turns",
+      detail: "6 of 14 turns ended in error in the last hour",
+      count: 1,
+      since: "2026-10-16T19:08:00.000Z",
+    });
+  });
+
+  it("says API requests, never turns, for OpenTelemetry", () => {
+    const row = failingRow(f, "otel");
+    expect(row.title).toBe("Gale is failing API requests");
+    expect(row.detail).toBe("6 of 14 API requests failed in the last hour");
+  });
+
+  it("counts toward Health in the sidebar", () => {
+    expect(
+      countsByView([failingRow(f, "otel"), failingRow(f, "otel")]),
+    ).toEqual({
+      health: 2,
+    });
   });
 });
