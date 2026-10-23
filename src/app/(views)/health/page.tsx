@@ -47,6 +47,7 @@ import {
 import { healthSource } from "@/lib/health-data";
 import { healthBuckets, historyEnabled } from "@/lib/history";
 import { loadHive } from "@/lib/hive";
+import { one, ownKey } from "@/lib/query";
 import { loadStatusFeed } from "@/lib/status-feed";
 
 export const metadata: Metadata = { title: "Health · Hive" };
@@ -55,9 +56,6 @@ const SOURCES = "/settings?tab=sources";
 const TABLE_ROWS = 8;
 // Light-mode text-destructive fails AA on its own tint (DESIGN.md → Sidebar).
 const DANGER_TEXT = "text-red-700 dark:text-destructive";
-
-const one = (v: string | string[] | undefined) =>
-  typeof v === "string" && v ? v : null;
 
 const initials = (name: string) =>
   name
@@ -87,11 +85,11 @@ export default async function HealthPage({
   // Health lives in the history store (#39); without it the view isn't there.
   if (!historyEnabled()) notFound();
   const params = await searchParams;
-  const rangeParam = one(params.range);
-  const range: Range =
-    rangeParam && Object.hasOwn(HEALTH_RANGES, rangeParam)
-      ? (rangeParam as Range)
-      : DEFAULT_HEALTH_RANGE;
+  const range: Range = ownKey(
+    HEALTH_RANGES,
+    one(params.range),
+    DEFAULT_HEALTH_RANGE,
+  );
   const rangeH = HEALTH_RANGES[range];
   const now = Math.floor(Date.now() / 1000);
 

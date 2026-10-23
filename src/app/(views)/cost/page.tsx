@@ -40,6 +40,7 @@ import {
 import { costConnected, signerRecord } from "@/lib/cost-source";
 import { costByChannel, costByDay, historyEnabled } from "@/lib/history";
 import { dayStarts, loadHive } from "@/lib/hive";
+import { one, ownKey } from "@/lib/query";
 
 export const metadata: Metadata = { title: "Cost · Hive" };
 
@@ -47,9 +48,6 @@ const SOURCES = "/settings?tab=sources";
 const MINI_CHARTS = 4;
 /** Tier 0 is the top of each stack, so the cheapest model sits at the bottom. */
 const TIER_BG = ["bg-model-1", "bg-model-2", "bg-model-3"];
-
-const one = (v: string | string[] | undefined) =>
-  typeof v === "string" && v ? v : null;
 
 const initials = (name: string) =>
   name
@@ -73,11 +71,11 @@ export default async function CostPage({ searchParams }: PageProps<"/cost">) {
   // Cost lives in the history store (#39); without it the view isn't there.
   if (!historyEnabled()) notFound();
   const params = await searchParams;
-  const rangeParam = one(params.range);
-  const range: CostRange =
-    rangeParam && rangeParam in COST_RANGES
-      ? (rangeParam as CostRange)
-      : DEFAULT_COST_RANGE;
+  const range: CostRange = ownKey(
+    COST_RANGES,
+    one(params.range),
+    DEFAULT_COST_RANGE,
+  );
   const unit: CostUnit = one(params.unit) === "tokens" ? "tokens" : "cost";
   const days = COST_RANGES[range];
 

@@ -51,6 +51,7 @@ import {
   prEvents,
   retentionDays,
 } from "@/lib/history";
+import { one, ownKey } from "@/lib/query";
 
 export const metadata: Metadata = { title: "Pipeline · Hive" };
 
@@ -69,9 +70,6 @@ const SLOW_TITLES = [
   "review and changes",
   "approved, waiting to merge",
 ];
-
-const one = (v: string | string[] | undefined) =>
-  typeof v === "string" && v ? v : null;
 
 const shortDate = (d: Date) =>
   d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -142,14 +140,12 @@ async function Flow({
 }: {
   params: Record<string, string | string[] | undefined>;
 }) {
-  const rangeParam = one(params.range);
-  const range: FlowRange =
-    rangeParam && rangeParam in FLOW_RANGES
-      ? (rangeParam as FlowRange)
-      : DEFAULT_FLOW_RANGE;
-  const sortParam = one(params.sort);
-  const sort: FlowSort =
-    sortParam && sortParam in FLOW_SORTS ? (sortParam as FlowSort) : "stalled";
+  const range: FlowRange = ownKey(
+    FLOW_RANGES,
+    one(params.range),
+    DEFAULT_FLOW_RANGE,
+  );
+  const sort: FlowSort = ownKey(FLOW_SORTS, one(params.sort), "stalled");
   const repo = one(params.repo);
   const agent = one(params.agent);
   const days = FLOW_RANGES[range];
