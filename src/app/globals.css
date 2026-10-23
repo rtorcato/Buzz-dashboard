@@ -32,6 +32,9 @@
   --color-stage-2-foreground: var(--stage-2-foreground);
   --color-stage-3: var(--stage-3);
   --color-stage-3-foreground: var(--stage-3-foreground);
+  --color-model-1: var(--model-1);
+  --color-model-2: var(--model-2);
+  --color-model-3: var(--model-3);
   --color-mark-foreground: var(--mark-foreground);
   --color-info: var(--info);
   --color-ring: var(--ring);
@@ -92,6 +95,10 @@
   --stage-2-foreground: #0a0a0a;
   --stage-3: #104281;
   --stage-3-foreground: #ffffff;
+  /* DESIGN.md → Tokens: Cost price tiers, top to low. Graphics, not text. */
+  --model-1: #2a78d6;
+  --model-2: #1baf7a;
+  --model-3: #6250d6;
   --info: oklch(0.546 0.245 262.881);
   /* chart-1 = PRs opened, chart-2 = PRs merged, chart-3 = neutral activity. */
   --chart-1: #2a78d6;
@@ -141,6 +148,9 @@
   --stage-2-foreground: #ffffff;
   --stage-3: #86b6ef;
   --stage-3-foreground: #0a0a0a;
+  --model-1: #3987e5;
+  --model-2: #199e70;
+  --model-3: #9085e9;
   --info: oklch(0.707 0.165 254.624);
   --chart-1: #3987e5;
   --chart-2: #d95926;

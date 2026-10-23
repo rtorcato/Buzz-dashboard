@@ -41,10 +41,6 @@ export function usageState(u: Usage, now: number): UsageState {
   };
 }
 
-/** " · pauses at 90%", or "" when the feed leaves the threshold out. */
-export const pausesAt = (at: number | null) =>
-  at === null ? "" : ` · pauses at ${at}%`;
-
 /** "5h window at 92% (pauses at 90%)" for the Needs-you row. */
 export function trippedDetail(u: Usage, tripped: "5h" | "7d") {
   const [value, at] =

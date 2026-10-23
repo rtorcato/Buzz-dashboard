@@ -1,4 +1,5 @@
 import {
+  doublePrecision,
   index,
   jsonb,
   pgTable,
@@ -46,3 +47,43 @@ export const events = pgTable(
 
 export type HistoryEvent = typeof events.$inferSelect;
 export type NewHistoryEvent = typeof events.$inferInsert;
+
+// Cost reports from Claude Code OpenTelemetry (#42): one row per delta data
+// point of claude_code.cost.usage or claude_code.token.usage. The key drops a
+// point the exporter retries.
+export const costPoints = pgTable(
+  "cost_points",
+  {
+    at: timestamp("at", { withTimezone: true }).notNull(),
+    /** The `agent` resource attribute, its Buzz display name. */
+    agent: text("agent").notNull(),
+    model: text("model").notNull(),
+    /** "cost" (USD at list price) or "tokens". */
+    metric: text("metric").notNull(),
+    /** Token type: input, output, cacheRead or cacheCreation; "" for cost. */
+    type: text("type").notNull(),
+    /**
+     * A hash of the point's other attributes (session.id, query_source and
+     * so on), so two series reported at the same instant both count.
+     */
+    series: text("series").notNull(),
+    value: doublePrecision("value").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.agent, t.series, t.model, t.metric, t.type, t.at],
+    }),
+    index("cost_points_at_idx").on(t.at),
+  ],
+);
+
+export type NewCostPoint = typeof costPoints.$inferInsert;
+
+// The dashboard's own state that only the owner changes (#40), as key/value.
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<unknown>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});

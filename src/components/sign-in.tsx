@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,6 +76,38 @@ async function signIn(): Promise<string | null> {
   });
   if (login.status === 403) return "That key isn't the dashboard's owner.";
   return login.ok ? null : "Sign-in failed. Try again.";
+}
+
+/** "Sign in with Nostr" for an owner note outside the sidebar. */
+export function SignInButton() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <Button
+        variant="outline"
+        className="h-9 max-md:h-11"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          const err = await signIn().catch(() => "Sign-in failed.");
+          setBusy(false);
+          if (err) setError(err);
+          else router.refresh();
+        }}
+      >
+        <KeyRound aria-hidden />
+        {busy ? "Signing in…" : "Sign in with Nostr"}
+      </Button>
+      {error && (
+        <span role="alert" className="text-xs text-destructive">
+          {error}
+        </span>
+      )}
+    </span>
+  );
 }
 
 // DESIGN.md → Sidebar → Sign-in block (#40). Only rendered when sign-in is

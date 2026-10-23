@@ -8,6 +8,13 @@
       "when": 1792761116700,
       "tag": "0000_history",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792769487335,
+      "tag": "0001_cost",
+      "breakpoints": true
     }
   ]
 }
