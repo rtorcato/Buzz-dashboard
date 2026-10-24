@@ -250,6 +250,33 @@ export async function setSetting(key: string, value: unknown) {
     });
 }
 
+/**
+ * Reads, changes and writes one setting under a lock on its key, so two
+ * read-modify-writes can't lose each other's change (#90). Returns the new value.
+ */
+export async function updateSetting<T>(
+  key: string,
+  change: (value: unknown) => T,
+): Promise<T> {
+  return historyDb().transaction(async (tx) => {
+    // An advisory lock rather than FOR UPDATE: it also covers a key not stored yet.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
+    const [row] = await tx
+      .select({ value: settings.value })
+      .from(settings)
+      .where(eq(settings.key, key));
+    const value = change(row?.value ?? null);
+    await tx
+      .insert(settings)
+      .values({ key, value })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value, updatedAt: new Date() },
+      });
+    return value;
+  });
+}
+
 export async function deleteSetting(key: string) {
   await historyDb().delete(settings).where(eq(settings.key, key));
 }

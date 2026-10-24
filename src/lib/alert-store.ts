@@ -25,7 +25,12 @@ import { decryptSecret, encryptSecret, publicOrigin } from "./auth";
 import { loadIngestTokenRecord, loadSignerRecord } from "./cost-source";
 import { readGitHub } from "./github";
 import { loadFailing } from "./health-data";
-import { getSetting, historyEnabled, setSetting } from "./history";
+import {
+  getSetting,
+  historyEnabled,
+  setSetting,
+  updateSetting,
+} from "./history";
 import {
   excludedLabels,
   failingKey,
@@ -143,7 +148,11 @@ export async function setQuiet(quiet: boolean) {
 /** Snoozed and acked alert items (#46); empty without the history store. */
 export async function loadMutes(): Promise<Mutes> {
   if (!historyEnabled()) return {};
-  const parsed = MutesSchema.safeParse(await getSetting(MUTE_KEY));
+  return toMutes(await getSetting(MUTE_KEY));
+}
+
+function toMutes(raw: unknown): Mutes {
+  const parsed = MutesSchema.safeParse(raw);
   return parsed.success ? parsed.data : {};
 }
 
@@ -156,9 +165,11 @@ export async function muteItems(
   if (until !== null && (until <= now || until > now + MAX_SNOOZE_MS)) {
     throw new AlertInputError("Snooze for up to two days");
   }
-  const mutes = await loadMutes();
-  for (const key of keys) mutes[key] = { until };
-  await setSetting(MUTE_KEY, mutes);
+  await updateSetting(MUTE_KEY, (raw) => {
+    const mutes = toMutes(raw);
+    for (const key of keys) mutes[key] = { until };
+    return mutes;
+  });
 }
 
 /** Posts one alert to one channel; throws when it doesn't land. */
@@ -253,14 +264,10 @@ export async function runAlerts(now = Date.now()) {
   // Acks still have to drop when their item clears, channels or not.
   if (!on && !Object.keys(await loadMutes()).length) return;
   const { items, complete } = await currentItems(now);
-  // Read the mutes again after the slow GitHub read, so a snooze saved
-  // meanwhile isn't overwritten.
-  const mutes = liveMutes(
-    await loadMutes(),
-    complete ? items.map((i) => i.key) : null,
-    now,
+  // Prune under the key's lock, so a snooze saved meanwhile isn't overwritten.
+  const mutes = await updateSetting(MUTE_KEY, (raw) =>
+    liveMutes(toMutes(raw), complete ? items.map((i) => i.key) : null, now),
   );
-  await setSetting(MUTE_KEY, mutes);
   if (!on) return;
   const prev = AlertStateSchema.safeParse(await getSetting(STATE_KEY));
   const { due, state } = dueAlerts(
