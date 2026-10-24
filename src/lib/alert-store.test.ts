@@ -10,6 +10,11 @@ vi.mock("./history", () => ({
   historyEnabled: () => true,
   getSetting: async (k: string) => store.get(k) ?? null,
   setSetting: async (k: string, v: unknown) => void store.set(k, v),
+  updateSetting: async (k: string, change: (v: unknown) => unknown) => {
+    const v = change(store.get(k) ?? null);
+    store.set(k, v);
+    return v;
+  },
 }));
 vi.mock("./cost-source", () => ({
   loadSignerRecord: async () => null,
@@ -26,8 +31,14 @@ vi.mock("./health-data", () => ({
 vi.mock("./github", () => ({ readGitHub: async () => ({ github: null }) }));
 vi.stubEnv("BUZZ_PRIVATE_KEY", "test-key");
 
-const { addChannel, loadAlerts, removeChannel, runAlerts, AlertInputError } =
-  await import("./alert-store");
+const {
+  addChannel,
+  loadAlerts,
+  muteItems,
+  removeChannel,
+  runAlerts,
+  AlertInputError,
+} = await import("./alert-store");
 
 const URL_ = "https://ntfy.sh/very-secret-topic";
 const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
@@ -69,4 +80,16 @@ it("sends once, and retries next pass only when no channel took it", async () =>
   await runAlerts(noon + 120_000);
   // Sent on the second pass; hourly, so not again yet.
   expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it("adds a mute without dropping the others, and a pass keeps both", async () => {
+  const noon = new Date(2026, 9, 23, 12).getTime();
+  store.set("alert_mute", { "merge:a": { until: null } });
+  await muteItems(["failing:Gale"], noon + 3_600_000, noon);
+  await runAlerts(noon);
+  // GitHub is unread here, so the pass keeps the merge ack too.
+  expect(store.get("alert_mute")).toEqual({
+    "merge:a": { until: null },
+    "failing:Gale": { until: noon + 3_600_000 },
+  });
 });
